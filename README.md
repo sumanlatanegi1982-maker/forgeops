@@ -203,6 +203,20 @@ npm run preview    # Preview production build
 
 ---
 
+---
+
+## Development Log
+
+### Day 1 — August 25, 2026
+- Project scaffolded: React + TypeScript + Vite frontend
+- TrueForge SDK integration configured (`@truefoundry/trueforge-sdk`)
+- Agent spec defined: code review + incident debugging with GitHub MCP, sandbox, and approval gate
+- Custom dark-theme UI built: sidebar, chat interface, tool call badges, approval cards
+- Qodo connected for automated PR code review
+- Next: set up TrueForge server on GitHub Codespaces, configure GitHub MCP and Daytona sandbox
+
+---
+
 ## License
 
 MIT
