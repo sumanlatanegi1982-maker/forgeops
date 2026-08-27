@@ -41,7 +41,7 @@ const TRUEFORGE_BASE_URL = getTrueForgeBaseUrl()
 
 /** Sarvam 105B — configured via TrueForge Custom provider with Sarvam endpoint */
 const AGENT_SPEC = {
-  model: { name: 'custom/sarvam-105b' },
+  model: { name: 'sarvam-105b/sarvam-105b' },
   instructions: `You are ForgeOps, a software engineering agent that does two jobs:
 
 1. Code Review: When given a pull request URL or number, fetch the PR diff and changed files via the GitHub MCP. Read the surrounding code for context. Clone the repo into the sandbox and run the test suite. Analyze the code for bugs, security issues, and logic errors. Post a structured review comment on the PR summarizing findings. Always pause before posting the review comment.
