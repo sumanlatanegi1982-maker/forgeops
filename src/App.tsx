@@ -244,7 +244,7 @@ export function App() {
                   <div className="welcome-sub">Welcome to ForgeOps</div>
                   <div className="welcome-title">Agent Node Visualizer</div>
                   <div className="suggestions">
-                    <div className="sugg-card" onClick={() => sendMessage('Review PR #1 — check for security issues and run the test suite', graphRef.current!)}>
+                    <div className="sugg-card" onClick={() => sendMessage('Review PR #1 in the repository sumanlatanegi1982-maker/forgeops — check for issues and summarize changes', graphRef.current!)}>
                       <div className="sugg-icon">📋</div>
                       <div className="sugg-text">Review a pull request</div>
                       <div className="sugg-sub">Read the diff, run tests, post a review</div>
@@ -258,60 +258,59 @@ export function App() {
                 </div>
               )}
 
-              {error && <div className="error-banner"><b>Error:</b> {error}</div>}
-
-              {messages.length > 0 && (
-                <div className="agent-panel">
-                  <div className={'agent-panel-head ' + (!isStreaming ? 'done' : '')}>
-                    <div className="agent-panel-title">
-                      <span className="agent-pulse"></span>
-                      <span>Agent Workflow</span>
-                    </div>
-                    <div className="agent-stats"><span>{nodeCount}</span> nodes · <span>{stepCount}</span> steps</div>
+              {/* Agent panel with node graph — always rendered so graph initializes */}
+              <div className="agent-panel" style={{ display: messages.length === 0 ? 'none' : 'block' }}>
+                <div className={'agent-panel-head ' + (!isStreaming ? 'done' : '')}>
+                  <div className="agent-panel-title">
+                    <span className="agent-pulse"></span>
+                    <span>Agent Workflow</span>
                   </div>
-                  <div className="agent-canvas-wrap">
-                    <canvas ref={canvasRef} id="agentCanvas"></canvas>
-                    <div className="minimap-wrap"><canvas ref={minimapRef} id="minimapCanvas"></canvas></div>
-                    <div className="agent-legend">
-                      <span className="leg"><span className="leg-dot" style={{background:'#b4a0ff'}}></span>Prompt</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#7dd3c0'}}></span>Thinking</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#e0b34a'}}></span>Tool</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#8ab4f5'}}></span>File</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#f97316'}}></span>Approval</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#6fcf97'}}></span>Answer</span>
-                    </div>
-                    <div className="zoom-controls">
-                      <button id="zoomPlus">+</button>
-                      <button id="zoomMinus">−</button>
-                      <button id="zoomReset">⤢</button>
-                      <span className="zoom-val" id="zoomVal">100%</span>
-                    </div>
-                    <div className="agent-nodeinfo" id="nodeInfo"></div>
-                    <div className={'node-detail ' + (detailOpen ? 'open' : '')}>
-                      <div className="nd-head">
-                        <div className="nd-head-left">
-                          <span className="nd-type-dot" style={{ color: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0', background: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0' }}></span>
-                          <span className="nd-type-label">{detailContent.type}</span>
-                        </div>
-                        <button className="nd-close" onClick={() => setDetailOpen(false)}>✕</button>
+                  <div className="agent-stats"><span>{nodeCount}</span> nodes · <span>{stepCount}</span> steps</div>
+                </div>
+                <div className="agent-canvas-wrap">
+                  <canvas ref={canvasRef} id="agentCanvas"></canvas>
+                  <div className="minimap-wrap"><canvas ref={minimapRef} id="minimapCanvas"></canvas></div>
+                  <div className="agent-legend">
+                    <span className="leg"><span className="leg-dot" style={{background:'#b4a0ff'}}></span>Prompt</span>
+                    <span className="leg"><span className="leg-dot" style={{background:'#7dd3c0'}}></span>Thinking</span>
+                    <span className="leg"><span className="leg-dot" style={{background:'#e0b34a'}}></span>Tool</span>
+                    <span className="leg"><span className="leg-dot" style={{background:'#8ab4f5'}}></span>File</span>
+                    <span className="leg"><span className="leg-dot" style={{background:'#f97316'}}></span>Approval</span>
+                    <span className="leg"><span className="leg-dot" style={{background:'#6fcf97'}}></span>Answer</span>
+                  </div>
+                  <div className="zoom-controls">
+                    <button id="zoomPlus">+</button>
+                    <button id="zoomMinus">−</button>
+                    <button id="zoomReset">⤢</button>
+                    <span className="zoom-val" id="zoomVal">100%</span>
+                  </div>
+                  <div className="agent-nodeinfo" id="nodeInfo"></div>
+                  <div className={'node-detail ' + (detailOpen ? 'open' : '')}>
+                    <div className="nd-head">
+                      <div className="nd-head-left">
+                        <span className="nd-type-dot" style={{ color: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0', background: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0' }}></span>
+                        <span className="nd-type-label">{detailContent.type}</span>
                       </div>
-                      <div className="nd-body">
-                        <div className="nd-label">{detailContent.label}</div>
+                      <button className="nd-close" onClick={() => setDetailOpen(false)}>✕</button>
+                    </div>
+                    <div className="nd-body">
+                      <div className="nd-label">{detailContent.label}</div>
+                      <div className="nd-section">
+                        <div className="nd-section-title">Details</div>
+                        <div className="nd-thinking">{detailContent.thinking}</div>
+                      </div>
+                      {detailContent.meta && (
                         <div className="nd-section">
-                          <div className="nd-section-title">Details</div>
-                          <div className="nd-thinking">{detailContent.thinking}</div>
+                          <div className="nd-section-title">Metadata</div>
+                          <div dangerouslySetInnerHTML={{ __html: detailContent.meta }} />
                         </div>
-                        {detailContent.meta && (
-                          <div className="nd-section">
-                            <div className="nd-section-title">Metadata</div>
-                            <div dangerouslySetInnerHTML={{ __html: detailContent.meta }} />
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {error && <div className="error-banner"><b>Error:</b> {error}</div>}
 
               {messages.map((msg) => (
                 <div key={msg.id} className={'msg ' + (msg.role === 'user' ? 'msg-user' : 'msg-ai')}>
