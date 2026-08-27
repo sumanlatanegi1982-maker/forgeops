@@ -168,6 +168,10 @@ export function App() {
       }
       const g = new AgentGraph(canvasRef.current, minimapRef.current, zoomBtns)
       g.tooltip = document.getElementById('nodeInfo')
+      g.onNodeCountChange = (count: number) => {
+        setNodeCount(count)
+        setStepCount(count)
+      }
       g.onNodeSelect = (node: GraphNode) => {
         g.selectedNode = node
         const def = NODE_TYPES[node.type]
@@ -186,18 +190,20 @@ export function App() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    if (graphRef.current) {
-      setNodeCount(graphRef.current.nodes.length)
-      setStepCount(graphRef.current.nodes.length)
-    }
   }, [messages, approvalRequests])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isStreaming) return
+    if (!graphRef.current) return
     const content = input.trim()
     setInput('')
-    sendMessage(content, graphRef.current!)
+    sendMessage(content, graphRef.current)
+  }
+
+  const handleSuggestion = (text: string) => {
+    if (!graphRef.current) return
+    sendMessage(text, graphRef.current)
   }
 
   return (
@@ -245,12 +251,12 @@ export function App() {
                   <div className="welcome-sub">Welcome to ForgeOps</div>
                   <div className="welcome-title">Agent Node Visualizer</div>
                   <div className="suggestions">
-                    <div className="sugg-card" onClick={() => sendMessage('Review PR #1 in the repository sumanlatanegi1982-maker/forgeops', graphRef.current!)}>
+                    <div className="sugg-card" onClick={() => handleSuggestion('Review PR #1 in the repository sumanlatanegi1982-maker/forgeops')}>
                       <div className="sugg-icon">📋</div>
                       <div className="sugg-text">Review a pull request</div>
                       <div className="sugg-sub">Read the diff, run tests, post a review</div>
                     </div>
-                    <div className="sugg-card" onClick={() => sendMessage('Payment failures are spiking. Investigate recent deploys and find the root cause.', graphRef.current!)}>
+                    <div className="sugg-card" onClick={() => handleSuggestion('Payment failures are spiking. Investigate recent deploys and find the root cause.')}>
                       <div className="sugg-icon">🚨</div>
                       <div className="sugg-text">Debug an incident</div>
                       <div className="sugg-sub">Bisect deploys, find the culprit, propose a fix</div>
