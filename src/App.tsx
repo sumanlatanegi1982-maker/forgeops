@@ -26,7 +26,6 @@ body::before { content:''; position:fixed; top:-220px; right:-220px; width:640px
 .logo-text { font-weight:700; font-size:16px; letter-spacing:-0.3px; }
 .new-chat { margin:4px 12px 12px; padding:10px 12px; border-radius:var(--radius-sm); background:var(--accent-dim); border:1px solid rgba(163,163,255,0.25); color:var(--text); font-family:var(--font-body); font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; cursor:pointer; }
 .new-chat:hover { background: rgba(163,163,255,0.22); }
-.sidebar-head { padding:16px 16px 12px; display:flex; align-items:center; gap:9px; }
 .nav { padding:0 12px; }
 .nav-item { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; color:var(--text-dim); font-size:13.5px; font-weight:500; cursor:pointer; }
 .nav-item:hover { background:var(--surface); color:var(--text); }
@@ -44,9 +43,9 @@ body::before { content:''; position:fixed; top:-220px; right:-220px; width:640px
 .dot { width:7px; height:7px; border-radius:50%; background:var(--text-faint); }
 .dot.online { background:var(--done); box-shadow:0 0 6px var(--done); }
 .dot.streaming { background:var(--think); box-shadow:0 0 6px var(--think); animation:pulse 1.5s infinite; }
-Keyframes pulse { 0%,100%{opacity:.4;transform:scale(.85);} 50%{opacity:1;transform:scale(1.1);} }
+@keyframes pulse { 0%,100%{opacity:.4;transform:scale(.85);} 50%{opacity:1;transform:scale(1.1);} }
 .session-id { font-size:11.5px; color:var(--text-faint); font-family:var(--font-mono); }
-.model-pill { padding:5px 10px; border-radius:99px; background:var(--surface-2); border:1px solid var(--border); font-size:11.5px; font-weight:500; color:var(--text-dim); font-family:var(--font-mono); }
+.model-pill { padding:5px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); font-size:11.5px; font-weight:500; color:var(--text-dim); font-family:var(--font-mono); }
 .chat-scroll { flex:1; overflow-y:auto; }
 .chat-inner { max-width:920px; margin:0 auto; padding:28px 24px 200px; }
 .welcome { display:flex; flex-direction:column; align-items:center; text-align:center; padding-top:6vh; }
@@ -60,12 +59,11 @@ Keyframes pulse { 0%,100%{opacity:.4;transform:scale(.85);} 50%{opacity:1;transf
 .sugg-text { font-size:13px; color:var(--text); font-weight:500; }
 .sugg-sub { font-size:11.5px; color:var(--text-faint); }
 .msg { margin-bottom:22px; animation:fadeUp .35s ease both; }
-Keyframes fadeUp { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:none;} }
-
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:none;} }
 .msg-user { display:flex; justify-content:flex-end; }
 .bubble-user { background:var(--surface-2); border:1px solid var(--border); border-radius:16px 16px 4px 16px; padding:11px 16px; max-width:70%; font-size:13.5px; line-height:1.5; }
 .msg-ai { display:flex; gap:12px; align-items:flex-start; }
-.ai-avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; background: radial-gradient(circle at 35% 30%, #c9cfff, #8484e8 55%, #5a5ac9); box-shadow:0 0 12px var(--accent-glow); margin-top:2px; }
+.ai-avatar { width:30px; height:30px; border-radius:50%; flex-shrink:0; background: radial-gradient(circle at 35% 30%, #c9c9ff, #8484e8 55%, #5a5ac9); box-shadow:0 0 12px var(--accent-glow); margin-top:2px; }
 .ai-body { flex:1; min-width:0; }
 .ai-text { font-size:13.5px; line-height:1.6; color:var(--text); }
 .ai-text p { margin-bottom:8px; }
@@ -91,8 +89,8 @@ Keyframes fadeUp { from{opacity:0;transform:translateY(8px);} to{opacity:1;trans
 .zoom-controls button { width:30px; height:30px; border-radius:7px; background:rgba(8,8,12,0.7); backdrop-filter:blur(6px); border:1px solid var(--border-strong); color:var(--text-dim); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 .zoom-controls button:hover { background:rgba(255,255,255,0.1); color:var(--text); }
 .zoom-val { font-family:var(--font-mono); font-size:9px; color:var(--text-faint); text-align:center; margin-top:2px; pointer-events:none; }
-.minimap-wrap { position:absolute; top:10px; left:12px; width:120px; height:80px; background:rgba(8,8,12,0.6); backdrop-filter:blur(0px); border:1px solid var(--border-strong); border-radius:6px; overflow:hidden; pointer-events:none; }
-.minimap.wrap canvas { display:block; width:100%; height:100%; }
+.minimap-wrap { position:absolute; top:10px; left:12px; width:120px; height:80px; background:rgba(8,8,12,0.6); backdrop-filter:blur(6px); border:1px solid var(--border-strong); border-radius:6px; overflow:hidden; pointer-events:none; }
+.minimap-wrap canvas { display:block; width:100%; height:100%; }
 .agent-nodeinfo { position:absolute; top:10px; right:12px; font-family:var(--font-mono); font-size:10.5px; color:var(--text); background:rgba(8,8,12,0.75); backdrop-filter:blur(8px); padding:6px 10px; border-radius:8px; border:1px solid var(--border-strong); pointer-events:none; opacity:0; transition:opacity .15s; max-width:240px; }
 .agent-nodeinfo.show { opacity:1; }
 .node-detail { position:absolute; top:0; right:0; bottom:0; width:300px; max-width:65%; background:rgba(12,12,15,0.92); backdrop-filter:blur(16px); border-left:1px solid var(--border-strong); transform:translateX(100%); transition:transform .3s cubic-bezier(0.4,0,0.2,1); display:flex; flex-direction:column; z-index:10; overflow:hidden; }
@@ -128,7 +126,7 @@ Keyframes fadeUp { from{opacity:0;transform:translateY(8px);} to{opacity:1;trans
 .input-bar:focus-within { border-color:rgba(163,163,255,0.4); box-shadow:0 4px 30px rgba(0,0,0,0.4), 0 0 0 3px rgba(163,163,255,0.08); }
 .input-bar textarea { flex:1; background:transparent; border:none; outline:none; resize:none; color:var(--text); font-family:var(--font-body); font-size:13.5px; line-height:1.5; max-height:160px; padding:6px 0; }
 .input-bar textarea::placeholder { color:var(--text-faint); }
-.send-btn { width:34px; height:34px; border-radius:50%; background:var(--accent); color:#0a0a0b; border:none; display:flex; align-tems:center; justify-content:center; cursor:pointer; }
+.send-btn { width:34px; height:34px; border-radius:50%; background:var(--accent); color:#0a0a0b; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .send-btn:hover { filter:brightness(1.1); }
 .send-btn:disabled { opacity:.4; cursor:default; }
 .input-hint { max-width:820px; margin:8px auto 0; text-align:center; font-size:10.5px; color:var(--text-faint); }
@@ -136,14 +134,21 @@ Keyframes fadeUp { from{opacity:0;transform:translateY(8px);} to{opacity:1;trans
 .typing-indicator span { width:8px; height:8px; border-radius:50%; background:var(--text-faint); animation:typing 1.4s infinite; }
 .typing-indicator span:nth-child(2) { animation-delay:.2s; }
 .typing-indicator span:nth-child(3) { animation-delay:.4s; }
-Keyframes typing { 0%,60%,100%{opacity:.3;} 30%{opacity:1;} }
+@keyframes typing { 0%,60%,100%{opacity:.3;} 30%{opacity:1;} }
 ::-webkit-scrollbar { width:8px; }
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:4px; }
 @media (max-width:860px) { .sidebar { display:none; } .suggestions { grid-template-columns:1fr; } }
-`;
-\n\n\nexport function App() {
-  const { messages, isStreaming, approvalRequests, sessionId, error, sendMessage, approveTool, resetSession } = useAgentSession()\n  const [input, setInput] = useState('')\n  const canvasRef = useRef<HTMLCanvasElement>(null)
+`
+
+function escapeHtml(s: string) {
+  return String(s).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>')
+}
+
+export function App() {
+  const { messages, isStreaming, approvalRequests, sessionId, error, sendMessage, approveTool, resetSession } = useAgentSession()
+  const [input, setInput] = useState('')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const minimapRef = useRef<HTMLCanvasElement>(null)
   const graphRef = useRef<AgentGraph | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -151,13 +156,219 @@ Keyframes typing { 0%,60%,100%{opacity:.3;} 30%{opacity:1;} }
   const [stepCount, setStepCount] = useState(0)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailContent, setDetailContent] = useState({ label: '', type: '', thinking: '', meta: '' })
-\n  useEffect(() => {
-    if (canvasRef.current && !graphRef.current) {\n      const g = new AgentGraph(canvasRef.current!, minimapRef.current, {})
-      g.onNodeSelect = (node: GraphNode) => {\n        g.selectedNode = node\n        const def = NODE_TYPES[node.type]
+
+  useEffect(() => {
+    if (canvasRef.current && !graphRef.current) {
+      const zoomBtns = {
+        plus: document.getElementById('zoomPlus') as HTMLButtonElement,
+        minus: document.getElementById('zoomMinus') as HTMLButtonElement,
+        reset: document.getElementById('zoomReset') as HTMLButtonElement,
+        val: document.getElementById('zoomVal') as HTMLElement,
+      }
+      const g = new AgentGraph(canvasRef.current!, minimapRef.current, zoomBtns)
+      g.tooltip = document.getElementById('nodeInfo')
+      g.onNodeSelect = (node: GraphNode) => {
+        g.selectedNode = node
+        const def = NODE_TYPES[node.type]
         const d = node.detail
-        let meta = ''\n        if (d.model) meta += `<div class="nd-meta-row"><span class="nd-meta-key">model</span><span class="nd-meta-val">${escapeHtml(d.model)}</span></div>`!
-        if (d.toolName) meta += `<div class="nd-meta-row"><span class="nd-meta-key">tool</span><span class="nd-meta-val">${eescapeHtml(d.toolName)}</span></div>`
-        if (d.status) meta += `<div class="nd-meta-row"><span class="nd-meta-key">status</span><span class="nd-meta-val">${d.status}</span></div>`
-        meta += `<div class="nd-meta-row"><span class="nd-meta-key">node_id</span><span class="nd-meta-val">#${node.id}</span></div>`!
+        let meta = ''
+        if (d.model) meta += '<div class="nd-meta-row"><span class="nd-meta-key">model</span><span class="nd-meta-val">' + escapeHtml(d.model) + '</span></div>'
+        if (d.toolName) meta += '<div class="nd-meta-row"><span class="nd-meta-key">tool</span><span class="nd-meta-val">' + escapeHtml(d.toolName) + '</span></div>'
+        if (d.status) meta += '<div class="nd-meta-row"><span class="nd-meta-key">status</span><span class="nd-meta-val">' + d.status + '</span></div>'
+        meta += '<div class="nd-meta-row"><span class="nd-meta-key">node_id</span><span class="nd-meta-val">#' + node.id + '</span></div>'
         setDetailContent({ label: node.label, type: def.label, thinking: d.thinking || d.result || 'No details recorded.', meta })
-        setDetailOpen(true)\n      }\n      graphRef.current = g\n    }\n  }, [])\n\n  useEffect(() => {\n    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })\n    if (graphRef.current) {\n      setNodeCount(graphRef.current.nodes.length)\n      setStepCount(graphRef.current.nodes.length)\n    }\n  }, [messages, approvalRequests])\n\n  const handleSubmit = (e: React.FormEvent) => {\n    e.preventDefault()\n    if (!input.trim() || isStreaming) return\n    const content = input.trim()\n    setInput('')\n    sendMessage(content, graphRef.current!)\n  }\n\n  return (\n    <>\n      <style>{CSS}</style>\n      <div className=\"app\">\n        <aside className=\"sidebar\">\n          <div className=\"sidebar-head\">\n            <div className=\"logo-mark\"></div>\n            <span className=\"logo-text\">ForgeOps</span>\n          </div>\n          <button className=\"new-chat\" onClick={resetSession}>+ New Session</button>\n          <nav className=\"nav\">\n            <div className=\"nav-item active\">>٘¥ Chat</div>\n            <div className=\"nav-item\">👊Code Reviews</div>\n            <div className=\"nav-item\">🌯Incidents</div>\n          </nav>\n          <div className=\"divider\"></div>\n          <div className=\"agent-status-sidebar\">\n            <div className=\"status-row\"><span className=\"status-label\">Model</span><span className=\"status-value\">sarvam-105b</span></div>\n            <div className=\"status-row\"><span className=\"status-label\">MCP</span><span className=\"status-value\">GitHub</span></div>\n            <div className=\"status-row\"><span className=\"status-label\">Sandbox</span><span className=\"status-value\">Daytona</span></div>\n            <div className=\"status-row\"><span className=\"status-label\">Approval</span><span className=\"status-value\">Write + Dest.</span></div>\n          </div>\n          <div className=\"sidebar-bottom\">\n            <p className=\"version\">ForgeOps v0.2 · TrueForge Hackathon</p>\n          </div>\n        </aside>\n        <main className=\"main\">\n          <div className=\"topbar\">\n            <div className=\"topbar-left\">\n              <span className={`dot ${isStreaming ? 'streaming' : sessionId ? 'online' : ''}`}></span>\n              <span>{isStreaming ? 'Agent working...' : sessionId ? 'Ready' : 'Idle'}</span>\n              {sessionId && <span className=\"session-id\">Session: {sessionId.slice(0, 8)}‥p�</span>}\n            </div>\n            <div className=\"model-pill\">sarvam-105b</div>\n          </div>\n          <div className=\"chat-scroll\" id=\"chatScroll\">\n            <div className=\"chat-inner\" id=\"chatInner\">\n              {messages.length === 0 && (\n                <div className=\"welcome\">\n                  <div className=\"welcome-mark\">�</div>\n                <div className=\"welcome-sub\">Welcome to ForgeOps</div>\n                <div className=\"welcome-title\">Agent Node Visualizer</div>\n                <div className=\"suggestions\">\n                  <div className=\"sugg-card\" onClick={() => sendMessage('Review PR #1 — check for security issues and run the test suite', graphRef.current!)}>\n                    <div className=\"sugg-icon\">👉</div>\n                    <div className=\"sugg-text\">Review a pull request</div>\n                    <div className=\"sugg-sub\">Read the diff, run tests, post a review</div>\n                  </div>\n                  <div className=\"sugg-card\" onClick={() => sendMessage('Payment failures are spiking. Investigate recent deploys and find the root cause.', graphRef.current!)}>\n                    <div className=\"sugg-icon\">🌯</div>\n                    <div className=\"sugg-text\">Debug an incident</div>\n                    <div className=\"sugg-sub\">Bisect deploys, find the culprit, propose a fix</div>\n                  </div>\n                </div>\n                </div>\n              )}\n\n              {error && <div className=\"error-banner\"><b>Error:</b> {error}</div>}\n\n              {messages.length > 0 && (\n                <div className=\"agent-panel\">\n                  <div className={`agent-panel-head ${!isStreaming ? 'done' : ''}`}>\n                    <div className=\"agent-panel-title\">\n                      <span className=\"agent-pulse\"></span>\n                      <span>Agent Workflow</span>\n                    </div>\n                    <div className=\"agent-stats\"><span>{nodeCount}</span> nodes » <span>{stepCount}</span> steps</div>\n                  </div>\n                  <div className=\"agent-canvas-wrap\">\n                    <canvas ref={canvasRef} id=\"agentCanvas\"></canvas>\n                    <div className=\"minimap.wrap\"><canvas ref={minimapRef} id=\"minimapCanvas\"></canvas></div>\n                    <div className=\"agent-legend\">\n                    <span className=\"leg\"><span className=\"leg-dot\" style={{background:'#b4a0ff'}}}></span>Prompt</span>\n                    <span className=\"leg\"><span className=\"leg-dot\" style={{background:'#7dd3c0'}}}></span>Thinking</span>\n                    <span className=\"leg\"><span className=\"leg-dot\" style={{background:'#e0b34a'}}></span>Tool</span>\n                    <span className=\"leg\"><span className=\"leg-dot\" style={{background:'#8ab4f5'}}></span>File</span>\n                    <span className=\"leg\"><span className=\"leg-dot\" style={{background:'#f97316'}}></span>Approval</span>\n                    <span className=\"leg\"><span className=\"leg-dot\" style={{background:'#6fcf97'}}}></span>Answer</span>\n                  </div>\n                    <div className=\"zoom-controls\">\n                    <button id=\"zoomPlus\">+</button>\n                    <button id=\"zoomMinus\">‎</button>\n                    <button id=\"zoomReset\">→</button>\n                    <span className=\"zoom-val\" id=\"zoomVal\">100%</span>\n                  </div>\n                  <div className=\"agent-nodeinfo\" id=\"nodeInfo\"></div>\n                  <div className={`node-detail ${detailOpen ? 'open' : ''}`}>\n                    <div className=\"nd-head\">\n                      <div className=\"nd-head-left\">\n                        <span className=\"nd-type-dot\" style={{ color: NODE_TYPES[detailContent.type as keyof typeof NODE_TYPES]?.color || '#7dd3c0', background: NODE_TYPES[detailContent.type as keyof typeof NODE_TYPES]?.color || '#7dd3c0' }}></span>\n                        <span className=\"nd-type-label\">{detailContent.type}</span>\n                      </div>\n                      <button className=\"nd-close\" onClick={() => setDetailOpen(false)}>◓</button>\n                    </div>\n                    <div className=\"nd-body\">\n                      <div className=\"nd-label\">{detailContent.label}</div>\n                      <div className=\"nd-section\">\n                        <div className=\"nd-section-title\">Details</div>\n                        <div className=\"nd-thinking\">{detailContent.thinking}</div>\n                      </div>\n                      {detailContent.meta && (\n                        <div className=\"nd-section\">\n                         <div className=\"nd-section-title\">Metadata</div>\n                         <div dangerouslySetInnerHTML={{ __html: detailContent.meta }} />\n                        </div>\n                      )}\n                    </div>\n                  </div>\n                </div>\n              </div>\n              }\n\n              {messages.map((msg) => (\n                <div key={msg.id} className={`msg ${msg.role === 'user' ? 'msg-user' : 'msg-ai'}`}>\n                  {msg.role === 'user' ? (\n                  <div className=\"bubble-user\">{msg.content}</div>\n                ) : (\n                  <>\n                  <div className=\"ai-avatar\"></div>\n                  <div className=\"ai-body\">\n                    <div className=\"ai-text\" dangerouslySetInnerHTML={{ __html: msg.content ? renderMarkdown(msg.content) : '<div className=\"typing-indicator\"><span></span> <span></span> <span></span></div>' }} />\n                  </div>\n                  </>\n                )}\n              </div>\n            ))}\n\n             {approvalRequests.map((ar) => (\n                <div className=\"approval-card\" key={ar.id}>\n                  <div className=\"approval-header\">\n                    <span className=\"approval-icon\">🂿【</span>\n                    <div>\n                      <h4>Approval Required</h4>\n                      <p>The agent wants to run a write/destructive tool.</p>\n                    </div>\n                  </div>\n                  <div className=\"approval-body\">\n                    <label>Tool</label>\n                    <code>{ar.toolName}</code>\n                    <label>Arguments</label>\n                    <pre>{JSON.stringify(sar.toolArguments, null, 2).slice(0, 500)}</pre>\n                  </div>\n                  <div className=\"approval-actions\">\n                    <button className=\"btn-approve\" onClick={() => approveTool(ar.id, true, undefined, graphRef.current || undefined)}>◪´Hellow</button>\n                    <button className=\"btn-deny\" onClick={() => approveTool(ar.id, false, 'Denied by user', graphRef.current || undefined)}>�ìDeny</button>\n                  </div>\n                </div>\n            ))}\n\n              <div ref={messagesEndRef} />\n            </div>\n          </div>\n\n          <div className=\"input-area\">\n            <form className=\"input-bar\" onSubmit={handleSubmit}>\n              <textarea\n                value={input}\n                onChange={(e) => setInput(e.target.value)}\n                placeholder=\"Ask ForgeOps to review a PR or debug an incident...\"\n                disabled={isStreaming}\n                rows={1}\n              />\n              <button type=\"submit\" className=\"send-btn\" disabled={isStreaming || !input.trim()}>‖</button>\n            </form>\n            <div className=\"input-hint\">ForgeOps uses TrueForge — tool calls, sandbox execution, and approval gating happen in real time.</div>\n          </div>\n        </main>\n      </div>\n    <>\n  )\n}\n\nfunction escapeHtml(s: string) {\n  return String(s).replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>')\n}
+        setDetailOpen(true)
+      }
+      graphRef.current = g
+    }
+  }, [])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (graphRef.current) {
+      setNodeCount(graphRef.current.nodes.length)
+      setStepCount(graphRef.current.nodes.length)
+    }
+  }, [messages, approvalRequests])
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim() || isStreaming) return
+    const content = input.trim()
+    setInput('')
+    sendMessage(content, graphRef.current!)
+  }
+
+  return (
+    <>
+      <style>{CSS}</style>
+      <div className="app">
+        <aside className="sidebar">
+          <div className="sidebar-head">
+            <div className="logo-mark"></div>
+            <span className="logo-text">ForgeOps</span>
+          </div>
+          <button className="new-chat" onClick={resetSession}>+ New Session</button>
+          <nav className="nav">
+            <div className="nav-item active">Chat</div>
+            <div className="nav-item">Code Reviews</div>
+            <div className="nav-item">Incidents</div>
+          </nav>
+          <div className="divider"></div>
+          <div className="agent-status-sidebar">
+            <div className="status-row"><span className="status-label">Model</span><span className="status-value">sarvam-105b</span></div>
+            <div className="status-row"><span className="status-label">MCP</span><span className="status-value">GitHub</span></div>
+            <div className="status-row"><span className="status-label">Sandbox</span><span className="status-value">Daytona</span></div>
+            <div className="status-row"><span className="status-label">Approval</span><span className="status-value">Write + Dest.</span></div>
+          </div>
+          <div className="sidebar-bottom">
+            <p className="version">ForgeOps v0.2 - TrueForge Hackathon</p>
+          </div>
+        </aside>
+
+        <main className="main">
+          <div className="topbar">
+            <div className="topbar-left">
+              <span className={'dot ' + (isStreaming ? 'streaming' : sessionId ? 'online' : '')}></span>
+              <span>{isStreaming ? 'Agent working...' : sessionId ? 'Ready' : 'Idle'}</span>
+              {sessionId && <span className="session-id">Session: {sessionId.slice(0, 8)}...</span>}
+            </div>
+            <div className="model-pill">sarvam-105b</div>
+          </div>
+
+          <div className="chat-scroll" id="chatScroll">
+            <div className="chat-inner" id="chatInner">
+              {messages.length === 0 && (
+                <div className="welcome">
+                  <div className="welcome-mark">⚡</div>
+                  <div className="welcome-sub">Welcome to ForgeOps</div>
+                  <div className="welcome-title">Agent Node Visualizer</div>
+                  <div className="suggestions">
+                    <div className="sugg-card" onClick={() => sendMessage('Review PR #1 — check for security issues and run the test suite', graphRef.current!)}>
+                      <div className="sugg-icon">📋</div>
+                      <div className="sugg-text">Review a pull request</div>
+                      <div className="sugg-sub">Read the diff, run tests, post a review</div>
+                    </div>
+                    <div className="sugg-card" onClick={() => sendMessage('Payment failures are spiking. Investigate recent deploys and find the root cause.', graphRef.current!)}>
+                      <div className="sugg-icon">🚨</div>
+                      <div className="sugg-text">Debug an incident</div>
+                      <div className="sugg-sub">Bisect deploys, find the culprit, propose a fix</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {error && <div className="error-banner"><b>Error:</b> {error}</div>}
+
+              {messages.length > 0 && (
+                <div className="agent-panel">
+                  <div className={'agent-panel-head ' + (!isStreaming ? 'done' : '')}>
+                    <div className="agent-panel-title">
+                      <span className="agent-pulse"></span>
+                      <span>Agent Workflow</span>
+                    </div>
+                    <div className="agent-stats"><span>{nodeCount}</span> nodes · <span>{stepCount}</span> steps</div>
+                  </div>
+                  <div className="agent-canvas-wrap">
+                    <canvas ref={canvasRef} id="agentCanvas"></canvas>
+                    <div className="minimap-wrap"><canvas ref={minimapRef} id="minimapCanvas"></canvas></div>
+                    <div className="agent-legend">
+                      <span className="leg"><span className="leg-dot" style={{background:'#b4a0ff'}}></span>Prompt</span>
+                      <span className="leg"><span className="leg-dot" style={{background:'#7dd3c0'}}></span>Thinking</span>
+                      <span className="leg"><span className="leg-dot" style={{background:'#e0b34a'}}></span>Tool</span>
+                      <span className="leg"><span className="leg-dot" style={{background:'#8ab4f5'}}></span>File</span>
+                      <span className="leg"><span className="leg-dot" style={{background:'#f97316'}}></span>Approval</span>
+                      <span className="leg"><span className="leg-dot" style={{background:'#6fcf97'}}></span>Answer</span>
+                    </div>
+                    <div className="zoom-controls">
+                      <button id="zoomPlus">+</button>
+                      <button id="zoomMinus">−</button>
+                      <button id="zoomReset">⤢</button>
+                      <span className="zoom-val" id="zoomVal">100%</span>
+                    </div>
+                    <div className="agent-nodeinfo" id="nodeInfo"></div>
+                    <div className={'node-detail ' + (detailOpen ? 'open' : '')}>
+                      <div className="nd-head">
+                        <div className="nd-head-left">
+                          <span className="nd-type-dot" style={{ color: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0', background: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0' }}></span>
+                          <span className="nd-type-label">{detailContent.type}</span>
+                        </div>
+                        <button className="nd-close" onClick={() => setDetailOpen(false)}>✕</button>
+                      </div>
+                      <div className="nd-body">
+                        <div className="nd-label">{detailContent.label}</div>
+                        <div className="nd-section">
+                          <div className="nd-section-title">Details</div>
+                          <div className="nd-thinking">{detailContent.thinking}</div>
+                        </div>
+                        {detailContent.meta && (
+                          <div className="nd-section">
+                            <div className="nd-section-title">Metadata</div>
+                            <div dangerouslySetInnerHTML={{ __html: detailContent.meta }} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {messages.map((msg) => (
+                <div key={msg.id} className={'msg ' + (msg.role === 'user' ? 'msg-user' : 'msg-ai')}>
+                  {msg.role === 'user' ? (
+                    <div className="bubble-user">{msg.content}</div>
+                  ) : (
+                    <>
+                      <div className="ai-avatar"></div>
+                      <div className="ai-body">
+                        <div className="ai-text" dangerouslySetInnerHTML={{ __html: msg.content ? renderMarkdown(msg.content) : '<div class="typing-indicator"><span></span><span></span><span></span></div>' }} />
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+
+              {approvalRequests.map((ar) => (
+                <div className="approval-card" key={ar.id}>
+                  <div className="approval-header">
+                    <span className="approval-icon">⚠️</span>
+                    <div>
+                      <h4>Approval Required</h4>
+                      <p>The agent wants to run a write/destructive tool.</p>
+                    </div>
+                  </div>
+                  <div className="approval-body">
+                    <label>Tool</label>
+                    <code>{ar.toolName}</code>
+                    <label>Arguments</label>
+                    <pre>{JSON.stringify(ar.toolArguments, null, 2).slice(0, 500)}</pre>
+                  </div>
+                  <div className="approval-actions">
+                    <button className="btn-approve" onClick={() => approveTool(ar.id, true, undefined, graphRef.current || undefined)}>✓ Allow</button>
+                    <button className="btn-deny" onClick={() => approveTool(ar.id, false, 'Denied by user', graphRef.current || undefined)}>✕ Deny</button>
+                  </div>
+                </div>
+              ))}
+
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          <div className="input-area">
+            <form className="input-bar" onSubmit={handleSubmit}>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask ForgeOps to review a PR or debug an incident..."
+                disabled={isStreaming}
+                rows={1}
+              />
+              <button type="submit" className="send-btn" disabled={isStreaming || !input.trim()}>→</button>
+            </form>
+            <div className="input-hint">ForgeOps uses TrueForge — tool calls, sandbox execution, and approval gating happen in real time.</div>
+          </div>
+        </main>
+      </div>
+    </>
+  )
+}
