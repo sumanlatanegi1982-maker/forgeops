@@ -48,7 +48,7 @@ body::before { content:''; position:fixed; top:-220px; right:-220px; width:640px
 .model-pill { padding:5px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); font-size:11.5px; font-weight:500; color:var(--text-dim); font-family:var(--font-mono); }
 .chat-scroll { flex:1; overflow-y:auto; }
 .chat-inner { max-width:920px; margin:0 auto; padding:28px 24px 200px; }
-.welcome { display:flex; flex-direction:column; align-items:center; text-align:center; padding-top:6vh; }
+.welcome { display:flex; flex-direction:column; align-items:center; text-align:center; padding-top:4vh; }
 .welcome-mark { width:56px; height:56px; border-radius:50%; background: radial-gradient(circle at 35% 30%, #c9c9ff, #8484e8 55%, #5a5ac9); box-shadow: 0 0 40px var(--accent-glow); display:flex; align-items:center; justify-content:center; margin-bottom:22px; font-size:24px; }
 .welcome-sub { font-size:13.5px; color:var(--text-dim); margin-bottom:6px; font-weight:500; }
 .welcome-title { font-size:30px; font-weight:700; letter-spacing:-0.5px; margin-bottom:30px; }
@@ -72,7 +72,7 @@ body::before { content:''; position:fixed; top:-220px; right:-220px; width:640px
 .ai-text pre { background:var(--bg); padding:12px; border-radius:8px; overflow-x:auto; margin:8px 0; border:1px solid var(--border); }
 .ai-text pre code { background:none; padding:0; }
 .error-banner { margin:0 0 16px; padding:10px 14px; background:rgba(239,107,107,0.1); border:1px solid var(--danger); border-radius:var(--radius-sm); color:var(--danger); font-size:13px; }
-.agent-panel { margin:4px 0 16px; background: linear-gradient(180deg, rgba(18,18,22,0.85), rgba(10,10,13,0.92)); border:1px solid var(--border-strong); border-radius:var(--radius); overflow:hidden; animation:fadeUp .4s ease both; box-shadow:0 8px 40px rgba(0,0,0,0.5); }
+.agent-panel { margin:4px 0 16px; background: linear-gradient(180deg, rgba(18,18,22,0.85), rgba(10,10,13,0.92)); border:1px solid var(--border-strong); border-radius:var(--radius); overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,0.5); }
 .agent-panel-head { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.03); }
 .agent-panel-title { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--text-dim); }
 .agent-pulse { width:8px; height:8px; border-radius:50%; background:var(--think); box-shadow:0 0 8px var(--think); animation:pulse 1.4s ease-in-out infinite; }
@@ -139,7 +139,6 @@ body::before { content:''; position:fixed; top:-220px; right:-220px; width:640px
 ::-webkit-scrollbar-track { background:transparent; }
 ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:4px; }
 @media (max-width:860px) { .sidebar { display:none; } .suggestions { grid-template-columns:1fr; } }
-.canvas-hidden { position:absolute; left:-9999px; top:0; width:800px; height:380px; }
 `
 
 function escapeHtml(s: string) {
@@ -158,6 +157,7 @@ export function App() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailContent, setDetailContent] = useState({ label: '', type: '', thinking: '', meta: '' })
 
+  // Initialize the graph as soon as the canvas element exists (on mount)
   useEffect(() => {
     if (canvasRef.current && !graphRef.current) {
       const zoomBtns = {
@@ -199,8 +199,6 @@ export function App() {
     setInput('')
     sendMessage(content, graphRef.current!)
   }
-
-  const showPanel = messages.length > 0
 
   return (
     <>
@@ -263,59 +261,6 @@ export function App() {
 
               {error && <div className="error-banner"><b>Error:</b> {error}</div>}
 
-              {showPanel && (
-                <div className="agent-panel">
-                  <div className={'agent-panel-head ' + (!isStreaming ? 'done' : '')}>
-                    <div className="agent-panel-title">
-                      <span className="agent-pulse"></span>
-                      <span>Agent Workflow</span>
-                    </div>
-                    <div className="agent-stats"><span>{nodeCount}</span> nodes · <span>{stepCount}</span> steps</div>
-                  </div>
-                  <div className="agent-canvas-wrap">
-                    <canvas ref={canvasRef} id="agentCanvas"></canvas>
-                    <div className="minimap-wrap"><canvas ref={minimapRef} id="minimapCanvas"></canvas></div>
-                    <div className="agent-legend">
-                      <span className="leg"><span className="leg-dot" style={{background:'#b4a0ff'}}></span>Prompt</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#7dd3c0'}}></span>Thinking</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#e0b34a'}}></span>Tool</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#8ab4f5'}}></span>File</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#f97316'}}></span>Approval</span>
-                      <span className="leg"><span className="leg-dot" style={{background:'#6fcf97'}}></span>Answer</span>
-                    </div>
-                    <div className="zoom-controls">
-                      <button id="zoomPlus">+</button>
-                      <button id="zoomMinus">−</button>
-                      <button id="zoomReset">⤢</button>
-                      <span className="zoom-val" id="zoomVal">100%</span>
-                    </div>
-                    <div className="agent-nodeinfo" id="nodeInfo"></div>
-                    <div className={'node-detail ' + (detailOpen ? 'open' : '')}>
-                      <div className="nd-head">
-                        <div className="nd-head-left">
-                          <span className="nd-type-dot" style={{ color: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0', background: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0' }}></span>
-                          <span className="nd-type-label">{detailContent.type}</span>
-                        </div>
-                        <button className="nd-close" onClick={() => setDetailOpen(false)}>✕</button>
-                      </div>
-                      <div className="nd-body">
-                        <div className="nd-label">{detailContent.label}</div>
-                        <div className="nd-section">
-                          <div className="nd-section-title">Details</div>
-                          <div className="nd-thinking">{detailContent.thinking}</div>
-                        </div>
-                        {detailContent.meta && (
-                          <div className="nd-section">
-                            <div className="nd-section-title">Metadata</div>
-                            <div dangerouslySetInnerHTML={{ __html: detailContent.meta }} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {messages.map((msg) => (
                 <div key={msg.id} className={'msg ' + (msg.role === 'user' ? 'msg-user' : 'msg-ai')}>
                   {msg.role === 'user' ? (
@@ -357,13 +302,57 @@ export function App() {
             </div>
           </div>
 
-          {/* Hidden canvas container — keeps the graph alive even before the panel is visible */}
-          {!showPanel && (
-            <div className="canvas-hidden">
-              <canvas ref={canvasRef} id="agentCanvas" width="800" height="380"></canvas>
-              <canvas ref={minimapRef} id="minimapCanvas" width="120" height="80"></canvas>
+          {/* Agent panel — always in the DOM so the graph canvas is ready before the first message */}
+          <div className="agent-panel" style={{ margin: '0 24px 0', flexShrink: 0 }}>
+            <div className={'agent-panel-head ' + (!isStreaming ? 'done' : '')}>
+              <div className="agent-panel-title">
+                <span className="agent-pulse"></span>
+                <span>Agent Workflow</span>
+              </div>
+              <div className="agent-stats"><span>{nodeCount}</span> nodes · <span>{stepCount}</span> steps</div>
             </div>
-          )}
+            <div className="agent-canvas-wrap">
+              <canvas ref={canvasRef} id="agentCanvas"></canvas>
+              <div className="minimap-wrap"><canvas ref={minimapRef} id="minimapCanvas"></canvas></div>
+              <div className="agent-legend">
+                <span className="leg"><span className="leg-dot" style={{background:'#b4a0ff'}}></span>Prompt</span>
+                <span className="leg"><span className="leg-dot" style={{background:'#7dd3c0'}}></span>Thinking</span>
+                <span className="leg"><span className="leg-dot" style={{background:'#e0b34a'}}></span>Tool</span>
+                <span className="leg"><span className="leg-dot" style={{background:'#8ab4f5'}}></span>File</span>
+                <span className="leg"><span className="leg-dot" style={{background:'#f97316'}}></span>Approval</span>
+                <span className="leg"><span className="leg-dot" style={{background:'#6fcf97'}}></span>Answer</span>
+              </div>
+              <div className="zoom-controls">
+                <button id="zoomPlus">+</button>
+                <button id="zoomMinus">−</button>
+                <button id="zoomReset">⤢</button>
+                <span className="zoom-val" id="zoomVal">100%</span>
+              </div>
+              <div className="agent-nodeinfo" id="nodeInfo"></div>
+              <div className={'node-detail ' + (detailOpen ? 'open' : '')}>
+                <div className="nd-head">
+                  <div className="nd-head-left">
+                    <span className="nd-type-dot" style={{ color: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0', background: (NODE_TYPES as any)[detailContent.type]?.color || '#7dd3c0' }}></span>
+                    <span className="nd-type-label">{detailContent.type}</span>
+                  </div>
+                  <button className="nd-close" onClick={() => setDetailOpen(false)}>✕</button>
+                </div>
+                <div className="nd-body">
+                  <div className="nd-label">{detailContent.label}</div>
+                  <div className="nd-section">
+                    <div className="nd-section-title">Details</div>
+                    <div className="nd-thinking">{detailContent.thinking}</div>
+                  </div>
+                  {detailContent.meta && (
+                    <div className="nd-section">
+                      <div className="nd-section-title">Metadata</div>
+                      <div dangerouslySetInnerHTML={{ __html: detailContent.meta }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="input-area">
             <form className="input-bar" onSubmit={handleSubmit}>
