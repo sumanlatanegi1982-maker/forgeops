@@ -34,6 +34,7 @@ export class AgentGraph {
   hoveredNode: GraphNode | null = null
   selectedNode: GraphNode | null = null
   onNodeSelect: ((node: GraphNode) => void) | null = null
+  onNodeCountChange: ((count: number) => void) | null = null
   tooltip: HTMLElement | null = null
   w = 0
   h = 0
@@ -50,6 +51,9 @@ export class AgentGraph {
     this.zoomBtns = zoomBtns
     this.resize()
     window.addEventListener('resize', () => this.resize())
+    // ResizeObserver catches the first real layout (canvas may have 0 size at mount)
+    const ro = new ResizeObserver(() => this.resize())
+    ro.observe(this.canvas)
     this.bindEvents()
     requestAnimationFrame(() => this.loop())
   }
@@ -142,6 +146,7 @@ export class AgentGraph {
     this.nodes = []; this.edges = []; this.running = true
     this.zoom = 1; this.panX = 0; this.panY = 0
     this.updateZoomLabel()
+    this.onNodeCountChange?.(0)
   }
 
   addNode(type: NodeType, label: string, parent: GraphNode | null = null, detail: NodeDetail = {}): GraphNode {
@@ -165,6 +170,7 @@ export class AgentGraph {
     }
     this.nodes.push(n)
     if (parent) this.edges.push({ a: parent.id, b: n.id, born: performance.now(), progress: 0 })
+    this.onNodeCountChange?.(this.nodes.length)
     return n
   }
 
