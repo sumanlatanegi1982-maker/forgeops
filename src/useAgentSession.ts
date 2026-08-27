@@ -12,7 +12,9 @@ import { useState, useCallback, useRef } from 'react'
 import type { ChatMessage, ApprovalRequest, GraphNode, NodeDetail } from './types'
 import { AgentGraph } from './agent-graph'
 
-const SDK_URL = 'https://esm.sh/@truefoundry/trueforge-sdk@latest'
+// Use the locally installed SDK (npm package) instead of CDN
+// This avoids slow esm.sh loads in Codespaces
+import { TrueForge } from '@truefoundry/trueforge-sdk'
 
 /**
  * Resolve the TrueForge server URL.
@@ -39,6 +41,12 @@ function getTrueForgeBaseUrl(): string {
 
 const TRUEFORGE_BASE_URL = getTrueForgeBaseUrl()
 
+// Create the client once
+const trueForgeClient = new TrueForge({
+  baseUrl: TRUEFORGE_BASE_URL,
+  timeoutInSeconds: 600,
+})
+
 /** Sarvam 105B — configured via TrueForge Custom provider with Sarvam endpoint */
 const AGENT_SPEC = {
   model: { name: 'sarvam-105b/sarvam-105b' },
@@ -60,20 +68,6 @@ Rules:
     sandbox: { enabled: true, file_downloads: true },
     iteration_limit: 50,
   },
-}
-
-let trueForgeClient: any = null
-
-async function loadClient() {
-  if (trueForgeClient) return trueForgeClient
-  try {
-    const mod = await import(/* @vite-ignore */ SDK_URL)
-    const TrueForge = mod.TrueForge || mod.default?.TrueForge || mod.default
-    trueForgeClient = new TrueForge({ baseUrl: TRUEFORGE_BASE_URL, timeoutInSeconds: 600 })
-    return trueForgeClient
-  } catch {
-    return null
-  }
 }
 
 function truncate(s: string, n: number) { return s.length > n ? s.slice(0, n - 1) + '\u2026' : s }
@@ -112,9 +106,7 @@ export function useAgentSession(): UseAgentSessionReturn {
   const createSession = useCallback(async () => {
     if (sessionRef.current) return sessionRef.current
     try {
-      const client = await loadClient()
-      if (!client) return null
-      const { data: session } = await client.sessions.create({ agent: { spec: AGENT_SPEC } })
+      const { data: session } = await trueForgeClient.sessions.create({ agent: { spec: AGENT_SPEC } })
       sessionRef.current = session.id
       setSessionId(session.id)
       return session.id
@@ -139,9 +131,7 @@ export function useAgentSession(): UseAgentSessionReturn {
     let currentNode = root
     let agentText = ''
     try {
-      const client = await loadClient()
-      if (!client) throw new Error('SDK not available')
-      const stream = await client.sessions.createTurnStream(sid, { input: [{ type: 'user.message', content }] })
+      const stream = await trueForgeClient.sessions.createTurnStream(sid, { input: [{ type: 'user.message', content }] })
       for await (const { data: event } of stream.withMetadata()) {
         switch (event.type) {
           case 'model.message.delta':
@@ -187,9 +177,8 @@ export function useAgentSession(): UseAgentSessionReturn {
     setApprovalRequests((p) => p.filter((a) => a.id !== approvalId))
     setIsStreaming(true)
     try {
-      const client = await loadClient()
-      if (!client || !graph) return
-      const stream = await client.sessions.createTurnStream(sid, { input: [{ type: 'user.tool_approval', allow, ...(reason ? { reason } : {}) }] })
+      if (!graph) return
+      const stream = await trueForgeClient.sessions.createTurnStream(sid, { input: [{ type: 'user.tool_approval', allow, ...(reason ? { reason } : {}) }] })
       let agentText = ''
       const agentMsgId = `agent-${Date.now()}`
       setMessages((p) => [...p, { id: agentMsgId, role: 'agent', content: '', timestamp: Date.now() }])
