@@ -24,5 +24,5 @@ Thumbs.db
 *.log
 npm-debug.log*
 
-# TrueForge local data (if you run it in the repo)
+# TrueForge local data
 trueforge-data/

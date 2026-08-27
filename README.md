@@ -1,21 +1,19 @@
 # ForgeOps
 
-> A custom web UI for a TrueForge agent that does **code review** and **incident debugging**.
+> A custom web UI for a TrueForge agent with **node-graph visualization** â€” watch the agent think, call tools, and pause for approval in real time.
 > Built for the [Agent Harness Hackathon](https://www.wemakedevs.org/hackathons/trueforge).
 
-ForgeOps is a React + TypeScript frontend that connects to a TrueForge server via the `@truefoundry/trueforge-sdk`. It replaces the default TrueForge terminal / bundled UI with a custom dashboard â€” chat with the agent, see tool calls as they happen, and approve or deny write/destructive actions before they run.
+ForgeOps replaces TrueForge's default terminal UI with a custom dashboard. Every agent action â€” thinking, tool calls, file edits, approvals â€” appears as a glowing node in a radial topology graph. You see the agent's reasoning unfold visually, not as plain text.
 
 ---
 
 ## What the agent does
 
-Two features, both powered by TrueForge's three pillars (MCP tools, sandbox, human approval):
-
 ### 1. Code Review
-- Fetches the PR diff and changed files via the GitHub MCP server
-- Clones the repo into the sandbox and runs the test suite
+- Fetches the PR diff and changed files via the GitHub MCP
+- Clones the repo into the Daytona sandbox and runs the test suite
 - Analyzes the code for bugs, security issues, and logic errors
-- **Pauses for approval** before posting the review comment (write action)
+- **Pauses for approval** before posting the review comment
 
 ### 2. Incident Debugging â†’ Post-mortem â†’ Fix
 - Fetches recent deploys and relevant code via the GitHub MCP
@@ -25,17 +23,34 @@ Two features, both powered by TrueForge's three pillars (MCP tools, sandbox, hum
 
 ---
 
+## Node-graph visualization
+
+Instead of plain-text "thinking" blocks, the agent's internal steps appear as nodes in a radial topology graph:
+
+| Node type | Color | Meaning |
+|-----------|-------|---------|
+| Prompt | Purple | Your input â€” central hub |
+| Thinking | Teal | Model reasoning between steps |
+| Tool Call | Amber | GitHub MCP or sandbox tool executing |
+| File Edit | Blue | Code being written or modified |
+| Approval | Orange | Write/destructive action â€” waiting for you |
+| Answer | Green | Final response delivered |
+
+**Features:** zoom (scroll or buttons), pan (click-drag), minimap, node detail drawer (click any node), hover tooltips, traveling pulse particles along edges.
+
+---
+
 ## Architecture
 
 ```
-Browser (React UI)
+Browser (React UI with node-graph canvas)
     â”‚
     â”‚  @truefoundry/trueforge-sdk (HTTP + SSE)
     â”‚
     â–¼
 TrueForge Server (localhost:8790)
     â”‚
-    â”œâ”€â”€ Model Provider (OpenAI / Anthropic / Gemini)
+    â”œâ”€â”€ Model: Sarvam 105B (via OpenAI-compatible endpoint)
     â”œâ”€â”€ MCP Server: GitHub (OAuth, connected in Settings)
     â””â”€â”€ Sandbox: Daytona (isolated code execution)
 ```
@@ -44,44 +59,30 @@ TrueForge Server (localhost:8790)
 
 ```
 forgeops/
-â”œâ”€â”€ index.html                 # HTML entry point
-â”œâ”€â”€ package.json               # Dependencies & scripts
-â”œâ”€â”€ tsconfig.json              # TypeScript config
-â”œâ”€â”€ tsconfig.node.json         # TypeScript config for Vite
-â”œâ”€â”€ vite.config.ts             # Vite config (with proxy to TrueForge)
-â”œâ”€â”€ .env.example               # Environment variable template
+â”œâ”€â”€ index.html              # HTML entry point
+â”œâ”€â”€ package.json            # Dependencies & scripts
+â”œâ”€â”€ vite.config.ts          # Vite config (with proxy to TrueForge)
+â”œâ”€â”€ tsconfig.json           # TypeScript config
+â”œâ”€â”€ tsconfig.node.json      # TypeScript config for Vite
+â”œâ”€â”€ .env.example            # Environment variable template
 â”œâ”€â”€ .gitignore
 â”œâ”€â”€ public/
-â”‚   â””â”€â”€ forgeops.svg           # Logo
+â”‚   â””â”€â”€ forgeops.svg        # Logo
 â””â”€â”€ src/
-    â”œâ”€â”€ main.tsx               # React entry point
-    â”œâ”€â”€ vite-env.d.ts          # Vite type declarations
-    â”œâ”€â”€ components/
-    â”‚   â”œâ”€â”€ App.tsx            # Main app layout
-    â”‚   â”œâ”€â”€ Sidebar.tsx        # Agent status & navigation
-    â”‚   â”œâ”€â”€ ChatMessage.tsx    # Renders agent/user messages (markdown)
-    â”‚   â”œâ”€â”€ ChatInput.tsx      # Message input bar
-    â”‚   â”œâ”€â”€ ApprovalCard.tsx   # Human-in-the-loop approval UI
-    â”‚   â””â”€â”€ ToolCallBadge.tsx  # Tool call status indicators
-    â”œâ”€â”€ hooks/
-    â”‚   â””â”€â”€ useAgentSession.ts # TrueForge session lifecycle (stream, approve, reset)
-    â”œâ”€â”€ lib/
-    â”‚   â”œâ”€â”€ env.ts             # Environment loader
-    â”‚   â”œâ”€â”€ trueforge-client.ts # TrueForge SDK client
-    â”‚   â””â”€â”€ agent-spec.ts      # Agent definition (model, MCP, sandbox, approval)
-    â”œâ”€â”€ types/
-    â”‚   â””â”€â”€ events.ts          # Event type definitions
-    â””â”€â”€ styles/
-        â””â”€â”€ app.css            # Full dark-theme styling
+    â”œâ”€â”€ main.tsx            # React entry point
+    â”œâ”€â”€ App.tsx             # Main app: sidebar, chat, node-graph canvas, approval cards
+    â”œâ”€â”€ agent-graph.ts      # AgentGraph class â€” radial node visualization engine
+    â”œâ”€â”€ useAgentSession.ts   # TrueForge session lifecycle (stream, approve, reset)
+    â””â”€â”€ types.ts            # All type definitions
 ```
 
 ---
 
 ## Prerequisites
 
-1. **Node.js 20+** â€” for running the frontend
-2. **TrueForge server** â€” installed and running locally
-3. **A model provider** â€” an API key for OpenAI, Anthropic, or Gemini
+1. **Node.js 24+** (or Node 20 minimum)
+2. **TrueForge server** â€” running locally or in GitHub Codespaces
+3. **Sarvam 105B** â€” configured as an OpenAI-compatible provider in TrueForge (â‚¹100 free credits, no rate limits)
 4. **Daytona account** â€” for the sandbox (free tier works)
 5. **GitHub MCP** â€” connected via TrueForge's Settings â†’ Connectors
 
@@ -95,128 +96,49 @@ forgeops/
 npx @truefoundry/trueforge
 ```
 
-This runs on `http://localhost:8790` with SQLite storage â€” no extra infra needed.
+Runs on `http://localhost:8790` with SQLite storage.
 
 ### 2. Configure TrueForge (in the TrueForge UI at localhost:8790)
 
-- **Settings â†’ Models**: Add your model provider (e.g. OpenAI or Anthropic)
-- **Settings â†’ Connectors**: Pick GitHub from the catalog, complete OAuth
-- **Settings â†’ Sandbox providers**: Pick Daytona, paste your API key
-
-### 3. Clone and install this frontend
-
-```bash
-git clone <your-repo-url> forgeops
-cd forgeops
-npm install
-```
-
-### 4. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` if your TrueForge server is not at the default URL.
-
-### 5. Run the frontend
-
-```bash
-npm run dev
-```
-
-Open `http://localhost:3000` â€” you should see the ForgeOps dashboard.
-
----
-
-## Using the agent
-
-Click one of the suggestion cards on the empty state, or type a message:
-
-- **"Review PR #42"** â€” the agent fetches the PR, runs tests in the sandbox, and pauses before posting the review
-- **"Payment failures are spiking. Investigate recent deploys."** â€” the agent bisects in the sandbox and pauses before any rollback
-
-When the agent hits a write or destructive action, an **Approval Card** appears showing the tool name and arguments. Click **Allow** or **Deny**.
-
----
-
-## Qodo code review setup
-
-Every submission must run substantive changes through Qodo-reviewed pull requests. The README must link to at least one reviewed PR.
-
-### One-time setup per team
-
-1. One teammate with admin access to the repository signs in to [Qodo](https://www.qodo.ai/)
-2. Go to **Integrations â†’ SaaS â†’ GitHub â†’ Add installation**
-3. Authorise Qodo for the hackathon repository
-
-### Workflow for every change
-
-1. Create a branch: `git checkout -b feat/your-feature`
-2. Make your changes and commit
-3. Push and open a Pull Request
-4. Qodo starts reviewing automatically (if it doesn't, comment `/qodo` on the PR)
-5. Fix every **High** severity finding before merging
-6. If a finding is wrong or intentional, dismiss it in the Qodo thread with a reason
-7. Merge the PR after review
-8. **Do not push directly to `main`** â€” direct pushes don't count as reviewed work
-
-### Link to a reviewed PR
-
-Add your reviewed PR link here before submission:
-
-> **Reviewed PR:** https://github.com/<your-org>/forgeops/pull/1
-
----
-
-## Development
-
-```bash
-npm run dev        # Start dev server (localhost:3000)
-npm run build      # Production build
-npm run typecheck  # Type-check without emitting
-npm run preview    # Preview production build
-```
-
----
-
-## Hackathon submission checklist
-
-- [ ] Public repo with a working README
-- [ ] Agent runs through TrueForge (not a thin wrapper)
-- [ ] Judge can see: real tool reached (GitHub MCP), code run in sandbox, pause for approval
-- [ ] Demo video (~3 minutes) showing all three pillars
-- [ ] Short write-up of what the agent does and how it uses TrueForge
-- [ ] At least one Qodo-reviewed PR linked in this README
-- [ ] No secrets or personal data in the repo or video
-
----
-
-## Tech stack
-
-- **React 19** + **TypeScript** â€” frontend
-- **Vite 6** â€” build tool & dev server
-- **@truefoundry/trueforge-sdk** â€” TrueForge client (HTTP + SSE)
-- **react-markdown** â€” rendering agent responses
-- **Daytona** â€” sandbox provider (via TrueForge)
-- **GitHub MCP** â€” tool access (via TrueForge)
-
----
-
----
-
-## Development Log
-
-### Day 1 â€” August 25, 2026
-- Project scaffolded: React + TypeScript + Vite frontend
-- TrueForge SDK integration configured (`@truefoundry/trueforge-sdk`)
-- Agent spec defined: code review + incident debugging with GitHub MCP, sandbox, and approval gate
-- Custom dark-theme UI built: sidebar, chat interface, tool call badges, approval cards
-- Qodo connected for automated PR code review
-- Next: set up TrueForge server on GitHub Codespaces, configure GitHub MCP and Daytona sandbox
-
----
-
-## License
-
-MIT
+- **Settings â†’ Models**: Configure Sarvam 105B as an OpenAI provider:
+  - Base URL: httÎ‹ËØ\KœØ\˜[K˜ZKİŒXˆHTHÙ^Nˆ[İ\ˆØ\˜[HTHÙ^Hœ›ÛHÙ\Ú›Ø\™œØ\˜[K˜ZWJÎ‹ËÙ\Ú›Ø\™œØ\˜[K˜ZJBˆH[Ù[QˆØ\˜[KLLX˜‹H
+Š”Ù][™ÜÈ8¡¤ˆÛÛ›™XİÜœÊŠˆXÚÈÚ]Xˆœ›ÛHHØ][ÙËÛÛ\]HĞ]]‹H
+Š”Ù][™ÜÈ8¡¤ˆØ[™›Ş›İšY\œÊŠˆXÚÈ^]Û˜K\İH[İ\ˆTHÙ^B‚ˆÈÈÈËˆÛÛ™H[™[œİ[\Èœ›Û[™‚˜˜\Ú™Ú]ÛÛ™HÎ‹ËÙÚ]X‹˜ÛÛKÜİ[X[›][™YÚLNN‹[XZÙ\‹Ù›Ü™Ù[ÜË™Ú]˜Ù›Ü™Ù[ÜÂ›œH[œİ[˜‚ˆÈÈÈˆÛÛ™šYİ\™H[š\›Û›Y[‚˜˜\Ú˜Ü™[‹™^[\H™[‚˜‚‘Y]™[˜Yˆ[İ\ˆYQ›Ü™ÙHÙ\™\ˆ\È›İ]HY˜][T“‚‚ˆÈÈÈKˆ[ˆHœ›Û[™‚˜˜\Ú›œH[ˆ]‚˜‚“Ü[ˆ‹ËÛØØ[ÜİŒÌ8 %[İHÚİ[ÙYHH›Ü™ÙSÜÈ\Ú›Ø\™Ú]H›ÙKYÜ˜\Ø[˜\Ë‚‚‹KKB‚ˆÈÈ\Ú[™ÈHYÙ[‚ÛXÚÈHİYÙÙ\İ[ÛˆØ\™Üˆ\HHY\ÜØYÙN‚‚‹H
+Šˆ”™]šY]ÈˆÌHŠŠˆ8 %HYÙ[™]Ú\ÈH‹[œÈ\İÈ[ˆHØ[™›Ş[™]\Ù\È™Y›Ü™HÜİ[™ÈH™]šY]Â‹H
+Šˆ”^[Y[˜Z[\™\È\™HÜZÚ[™Ëˆ[™\İYØ]H™XÙ[\Ş\ËˆŠŠˆ8 %HYÙ[š\ÙXİÈ[ˆHØ[™›Ş[™]\Ù\È™Y›Ü™H[H›Û˜XÚÂ‚•Ú[ˆHYÙ[]ÈHÜš]HÜˆ\İXİ]™HXİ[Û‹[ˆ
+Š\›İ˜[Ø\™
+Šˆ\X\œËˆÛXÚÈ
+Š[İÊŠˆÜˆ
+Š‘[JŠ‹‚‚‹KKB‚ˆÈÈ[ÙÈÛÙH™]šY]ÈÙ]\‚‘]™\HİX›Z\ÜÚ[Ûˆ]\İ[ˆİXœİ[]™HÚ[™Ù\È›İYÚ[ÙË\™]šY]ÙY[™\]Y\İË‚‚ˆÈÈÈÛ™K][YHÙ]\‚ŒKˆÚYÛˆ[ˆÈÔ[Ù×JÎ‹ËİİİËœ[ÙË˜ZKÊH
+MY^Hœ™YHšX[Ûİ™\œÈHXÚØ]ÛŠBŒ‹ˆÛÈÈ
+Š’[YÜ˜][ÛœÈ8¡¤ˆØXTÈ8¡¤ˆÚ]Xˆ8¡¤ˆY[œİ[][ÛŠŠ‚ŒËˆ]]Üš\ÙH[ÙÈ›Üˆ\È™\ÜÚ]ÜB‚ˆÈÈÈÛÜšÙ›İÈ›Üˆ]™\HÚ[™ÙB‚ŒKˆÜ™X]HHœ˜[˜ÚˆÚ]ÚXÚÛİ]Xˆ™X]Ş[İ\‹Y™X]\™XŒ‹ˆXZÙH[İ\ˆÚ[™Ù\È[™ÛÛ[Z]ŒËˆ\Ú[™Ü[ˆH[™\]Y\İˆ[ÙÈ™]šY]ÜÈ]]ÛX]XØ[H
+ÛÛ[Y[Ü[ÙØYˆ]Ù\Û‰İ
+BKˆš^]™\H
+Š’YÚ
+ŠˆÙ]™\š]Hš[™[™È™Y›Ü™HY\™Ú[™Â‹ˆ
+Š‘È›İ\Ú\™XİHÈXZ[˜
+Š‚‚ˆÈÈÈ™]šY]ÙY‚‚ˆ
+Š”™]šY]ÙYŠŠˆÎ‹ËÙÚ]X‹˜ÛÛKÜİ[X[›][™YÚLNN‹[XZÙ\‹Ù›Ü™Ù[ÜËÜ[ÌB‚‹KKB‚ˆÈÈ]™[ÜY[‚˜˜\Ú›œH[ˆ]ˆÈİ\]ˆÙ\™\ˆ
+ØØ[ÜİŒÌ
+B›œH[ˆZ[È›ÙXİ[ÛˆZ[›œH[ˆ\XÚXÚÈÈ\KXÚXÚÈÚ]İ][Z][™Â›œH[ˆ™]šY]ÈÈ™]šY]È›ÙXİ[ÛˆZ[˜‚‹KKB‚ˆÈÈ[›š[™È[ˆÚ]XˆÛÙ\ÜXÙ\Â‚’Yˆ[İ\ˆØØ[ÔÈÙ\Û‰İİ\ÜYQ›Ü™ÙH
+Ú[™İÜÊK\ÙHÛÙ\ÜXÙ\Î‚‚ŒKˆÛÈÈÙÚ]X‹˜ÛÛKØÛÙ\ÜXÙ\×JÎ‹ËÙÚ]X‹˜ÛÛKØÛÙ\ÜXÙ\ÊH8¡¤ˆ™]ÈÛÙ\ÜXÙH8¡¤ˆXÚÈ\È™\ÂŒ‹ˆ[œİ[›ÙKšœÎˆİ\›YœÔÓÎ‹ËÙX‹››Ù\Ûİ\˜ÙK˜ÛÛKÜÙ]\ÌİYÈQH˜\ÚH	‰ˆİYÈ\[œİ[^H›ÙZœØŒËˆİ\YQ›Ü™ÙNˆœYY›İ[™KİYY›Ü™ÙXˆ[ˆHÙXÛÛ™\›Z[˜[ˆœH[œİ[	‰ˆœH[ˆ]˜KˆÜ[ˆH›ÜØ\™YÜÌ[ˆ[İ\ˆœ›İÜÙ\‚‚”Ù][™ÜÈ\œÚ\İXÜ›ÜÜÈÛÙ\ÜXÙH™\İ\È
+İÜ™Y[ˆÔS]HÛˆ\ÚÊK‚‚‹KKB‚ˆÈÈXÚØ]ÛˆİX›Z\ÜÚ[ÛˆÚXÚÛ\İ‚‹HŞHX›XÈ™\ÈÚ]HÛÜšÚ[™È‘PQQB‹HŞHYÙ[[œÈ›İYÚYQ›Ü™ÙH
+›İH[ˆÜ˜\\ŠB‹HŞHYÙHØ[ˆÙYNˆ™X[ÛÛ™XXÚY
+Ú]XˆPÔ
+KÛÙH[ˆ[ˆØ[™›Ş]\ÙH›Üˆ\›İ˜[‹HŞH›ÙKYÜ˜\š\İX[^˜][ÛˆÙˆYÙ[ÛÜšÙ›İÂ‹HÈH[[ÈšY[È
+ŒÈZ[]\ÊHÚİÚ[™È[™YH[\œÂ‹HÈHÚÜÜš]K]\ÙˆÚ]HYÙ[Ù\È[™İÈ]\Ù\ÈYQ›Ü™ÙB‹HŞH]X\İÛ™H[ÙË\™]šY]ÙYˆ[šÙY[ˆ\È‘PQQB‹HŞH›ÈÙXÜ™]ÈÜˆ\œÛÛ˜[]H[ˆH™\Â‚‹KKB‚ˆÈÈXÚİXÚÂ‚‹H
+Š”™XXİNJŠˆ
+È
+Š•\TØÜš\
+Šˆ8 %œ›Û[™‹H
+Š•š]HŠŠˆ8 %Z[ÛÛ	ˆ]ˆÙ\™\‚‹H
+ŠYY›İ[™KİYY›Ü™ÙK\ÙÊŠˆ8 %YQ›Ü™ÙHÛY[
+
+ÈÔÑJB‹H
+ŠØ[˜\ÈTJŠˆ8 %İ\İÛH›ÙKYÜ˜\š\İX[^˜][Ûˆ
+›È^\›˜[Ü˜\Xœ˜\JB‹H
+Š”Ø\˜[HLPŠŠˆ8 %[Ù[šXHÜ[RKXÛÛ\]X›H[™Ú[‹H
+Š‘^]Û˜JŠˆ8 %Ø[™›Ş›İšY\ˆ
+šXHYQ›Ü™ÙJB‹H
+Š‘Ú]XˆPÔ
+Šˆ8 %FööÂ66W72‡f–G'VTf÷&vR ¢ÒÒĞ ¢22Æ–6Vç6P ¤Ô•
