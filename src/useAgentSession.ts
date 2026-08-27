@@ -14,10 +14,30 @@ import { AgentGraph } from './agent-graph'
 
 const SDK_URL = 'https://esm.sh/@truefoundry/trueforge-sdk@latest'
 
-const TRUEFORGE_BASE_URL =
-  window.location.origin.startsWith('http://localhost')
-    ? 'http://localhost:8790'
-    : window.location.origin
+/**
+ * Resolve the TrueForge server URL.
+ *
+ * - Localhost (npm run dev): http://localhost:8790
+ * - GitHub Codespaces: replace the port in the codespace URL from 3000 to 8790
+ *   e.g. https://super-duper-goldfish-5gp65q5pv7p3p6qq-3000.app.github.dev
+ *    -> https://super-duper-goldfish-5gp65q5pv7p3p6qq-8790.app.github.dev
+ * - Otherwise: same origin (for production builds where frontend and API share a domain)
+ */
+function getTrueForgeBaseUrl(): string {
+  const origin = window.location.origin
+  if (origin.startsWith('http://localhost')) {
+    return 'http://localhost:8790'
+  }
+  // GitHub Codespaces: URL pattern is https://<name>-<port>.app.github.dev
+  // Replace -3000 (or any port) with -8790
+  const codespaceMatch = origin.match(/^(https:\/\/[^-]+-[^-]+)-(\d+)(\.app\.github\.dev.*)$/)
+  if (codespaceMatch) {
+    return `${codespaceMatch[1]}-8790${codespaceMatch[3]}`
+  }
+  return origin
+}
+
+const TRUEFORGE_BASE_URL = getTrueForgeBaseUrl()
 
 /** Sarvam 105B — configured via TrueForge OpenAI provider with Sarvam endpoint */
 const AGENT_SPEC = {
