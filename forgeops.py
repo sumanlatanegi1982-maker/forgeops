@@ -542,12 +542,27 @@ class ForgeOpsCLI:
         approval_needed = None
         full_response = ""
         has_streamed = False
+        spinner_started = False
+        live = None
 
         try:
             for event in self.tf_client.stream_turn(self.session_id, content):
+                etype = event.get("type", "")
+
+                # Start spinner before first token arrives (when we get a non-delta event)
+                if etype not in ("model.message.delta",) and not has_streamed and not spinner_started:
+                    spinner_started = True
+                    live = Live(Spinner("dots", text=Text("  Agent thinking...", style=f"{C_THINK}"), style=C_THINK), console=console, transient=True)
+                    live.start()
+
+                # Stop spinner when first text arrives or a tool call appears
+                if spinner_started and (etype == "model.message.delta" or etype == "tool.call" or etype == "tool.approval_required" or etype == "sandbox.created" or etype == "error" or etype == "turn.done"):
+                    live.stop()
+                    spinner_started = False
+
                 should_cont, approval = self.process_trueforge_event(event)
 
-                if event.get("type") == "model.message.delta":
+                if etype == "model.message.delta":
                     has_streamed = True
                     full_response += event.get("content", "")
 
@@ -556,6 +571,11 @@ class ForgeOpsCLI:
 
                 if not should_cont:
                     break
+
+            # Make sure spinner is stopped if stream ended before any text
+            if spinner_started and live:
+                live.stop()
+                spinner_started = False
 
             # Handle approval
             if approval_needed:
@@ -587,9 +607,13 @@ class ForgeOpsCLI:
             return True
 
         except KeyboardInterrupt:
+            if spinner_started and live:
+                live.stop()
             console.print(f"\n  [{C_ERROR}]Interrupted.[/]")
             return False
         except Exception as e:
+            if spinner_started and live:
+                live.stop()
             print_error(str(e))
             return False
 
