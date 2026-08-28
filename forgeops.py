@@ -478,27 +478,32 @@ class ForgeOpsCLI:
             return (True, None)
 
         elif etype == "tool.call":
-            tool_name = event.get("toolName", "unknown")
-            tool_args = json.dumps(event.get("toolArguments", {}), indent=2)[:300]
+            tool_name = event.get("toolName") or "unknown"
+            tool_args_raw = event.get("toolArguments") or {}
+            tool_args = json.dumps(tool_args_raw, indent=2)[:300]
             print_tool_call(tool_name, tool_args)
             self.step_count += 1
             return (True, None)
 
         elif etype == "tool.result":
             result = str(event.get("toolResult", ""))
-            status = event.get("state", {}).get("status", "done")
+            state = event.get("state") or {}
+            status = state.get("status", "done") if isinstance(state, dict) else "done"
             print_tool_result(result, status)
             return (True, None)
 
         elif etype == "tool.approval_required":
-            tool_name = event.get("toolName", "unknown")
-            tool_args = json.dumps(event.get("toolArguments", {}), indent=2)[:300]
+            tool_name = event.get("toolName") or "unknown"
+            tool_args_raw = event.get("toolArguments") or {}
+            tool_args = json.dumps(tool_args_raw, indent=2)[:300]
             print_approval(tool_name, tool_args)
             return (True, {"tool": tool_name, "args": tool_args, "event": event})
 
         elif etype == "turn.done":
-            status = event.get("state", {}).get("status", "done")
-            output = event.get("state", {}).get("output", {}).get("content", "")
+            state = event.get("state") or {}
+            status = state.get("status", "done") if isinstance(state, dict) else "done"
+            output_obj = state.get("output") or {} if isinstance(state, dict) else {}
+            output = output_obj.get("content", "") if isinstance(output_obj, dict) else ""
             if status == "error":
                 print_error("Agent turn ended with an error.")
             elif output and not console.file.isatty():
@@ -506,17 +511,17 @@ class ForgeOpsCLI:
             return (False, None)
 
         elif etype == "error":
-            msg = event.get("message", "Unknown error")
+            msg = event.get("message") or "Unknown error"
             print_error(msg)
             return (False, None)
 
         elif etype == "sandbox.created":
-            sandbox_id = event.get("sandboxId", "?")
+            sandbox_id = event.get("sandboxId") or "?"
             print_step("info", f"Sandbox created: {str(sandbox_id)[:20]}...")
             return (True, None)
 
         elif etype == "thread.created":
-            title = event.get("title", "subagent")
+            title = event.get("title") or "subagent"
             print_step("info", f"Subagent thread: {title}")
             return (True, None)
 
@@ -621,10 +626,15 @@ class ForgeOpsCLI:
 
         # Fallback: just show file context
         if file_context:
-            console.print(f"[{C_THINK}]File context loaded. Connect to TrueForge for AI analysis.[/]")
+            console.print(f"[{C_THINK}]File context loaded. Start TrueForge ('npx @truefoundry/trueforge') for AI analysis.[/]")
         else:
-            console.print(f"[{C_DIM}]Local mode — use /file, /ls, /tree, /grep, /run to interact with your files.[/]")
-            console.print(f"[{C_DIM}]Start TrueForge with 'npx @truefoundry/trueforge' for AI-powered analysis.[/]")
+            console.print(f"[{C_THINK}]Local file mode — use these commands to work with your files:[/]")
+            console.print(f"  [{C_ACCENT}]/file <path>[/]  — Read a file into context")
+            console.print(f"  [{C_ACCENT}]/ls <dir>[/]    — List directory")
+            console.print(f"  [{C_ACCENT}]/tree <dir>[/]  — Show file tree")
+            console.print(f"  [{C_ACCENT}]/grep <pat>[/] — Search in files")
+            console.print(f"  [{C_ACCENT}]/run <cmd>[/]   — Run a shell command")
+            console.print(f"  [{C_DIM}]Start TrueForge with 'npx @truefoundry/trueforge' for AI-powered analysis.[/]")
         console.print()
         return True
 
@@ -766,12 +776,12 @@ class ForgeOpsCLI:
 
         if not self.local_mode:
             if not self.init_trueforge():
-                console.print(f"[{C_ERROR}]Could not connect to TrueForge. Falling back to local mode.[/]")
+                console.print(f"[{C_THINK}]TrueForge not available. Switching to local file mode.[/]")
                 self.local_mode = True
                 self.mode = "Local"
             else:
                 if not self.create_session():
-                    console.print(f"[{C_ERROR}]Could not create session. Falling back to local mode.[/]")
+                    console.print(f"[{C_THINK}]Could not create session. Switching to local file mode.[/]")
                     self.local_mode = True
                     self.mode = "Local"
 
