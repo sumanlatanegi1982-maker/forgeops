@@ -19,7 +19,7 @@ import { env, stdout, stdin, exit } from 'process';
 const BASE_URL   = env.TRUEFORGE_BASE_URL || 'http://localhost:8790';
 const AGENT_NAME = env.TRUEFORGE_AGENT || 'forgeopsv1s';
 const TOKEN      = env.TRUEFORGE_TOKEN || undefined;
-const VERSION    = '3.5.1';
+const VERSION    = '3.6.0';
 
 // ─── ANSI Colors ─────────────────────────────────────────────────────────────
 
@@ -173,19 +173,24 @@ function askApproval(toolName, toolArgs) {
 
 // ─── Run a turn and return collected pending approvals ────────────────────────
 
+let stepCounter = 0;
+
 async function runTurnStream(inputItems) {
   const pendingApprovals = [];
+  stepCounter = 0;
 
   const stream = await client.sessions.createTurnStream(sessionId, { input: inputItems });
 
   for await (const { data: event, id: eventId } of stream.withMetadata()) {
     const type = event.type;
 
+    // Index every non-delta event
     if (type !== 'model.message.delta' && type !== 'model.message.delta.chunk') {
       const eid = event.id || eventId;
       if (eid) eventIndex.set(eid, event);
     }
 
+    // ── Model text streaming ──────────────────────────────────────────────
     if (type === 'model.message.delta') {
       if (event.threadId === 'main' || !event.threadId) {
         stopSpinner();
@@ -193,29 +198,58 @@ async function runTurnStream(inputItems) {
       }
     }
 
+    // ── Model message (complete, not delta) — may contain tool_calls ───────
+    else if (type === 'model.message') {
+      // Index it for approval lookups
+      const eid = event.id || eventId;
+      if (eid) eventIndex.set(eid, event);
+    }
+
+    // ── Tool call ─────────────────────────────────────────────────────────
     else if (type === 'tool.call') {
       stopSpinner();
-      const toolName = event.toolName || event.tool_name || 'unknown';
-      const toolArgs = event.toolArguments || event.tool_arguments || {};
-      console.log(`\n${C.yellow}⚙ ${C.bold}${toolName}${C.reset}`);
-      const argsStr = JSON.stringify(toolArgs);
-      if (argsStr !== '{}') {
-        console.log(`${C.dim}  ${argsStr.slice(0, 200)}${C.reset}`);
+      stepCounter++;
+      // Try every possible field name for tool name
+      const toolName = event.toolName || event.tool_name || event.name ||
+                       event.toolInfo?.name || event.tool_info?.name ||
+                       event.function?.name || 'tool';
+      // Try every possible field name for arguments
+      let toolArgs = event.toolArguments || event.tool_arguments ||
+                     event.arguments || event.function?.arguments ||
+                     event.input || event.args || {};
+      if (typeof toolArgs === 'string') {
+        try { toolArgs = JSON.parse(toolArgs); } catch { /* keep string */ }
       }
+
+      // Show step number + tool name (like web UI "Agent steps")
+      console.log(`${C.dim}  Step ${stepCounter}:${C.reset} ${C.yellow}⚙ ${C.bold}${toolName}${C.reset}`);
+
+      // Show key arguments (truncated)
+      if (toolArgs && typeof toolArgs === 'object' && Object.keys(toolArgs).length > 0) {
+        const argsStr = JSON.stringify(toolArgs);
+        const truncated = argsStr.length > 120 ? argsStr.slice(0, 120) + '...' : argsStr;
+        console.log(`${C.dim}         ${truncated}${C.reset}`);
+      }
+
       startSpinner('Running tool');
     }
 
-    else if (type === 'tool.result') {
+    // ── Tool result ───────────────────────────────────────────────────────
+    else if (type === 'tool.result' || type === 'tool.response') {
       stopSpinner();
-      const status = (event.state || {}).status || 'done';
-      if (status === 'done') {
-        console.log(`${C.dim}  ✓ done${C.reset}`);
+      const status = (event.state || event.status || {}).status || 'done';
+      if (status === 'done' || status === 'success') {
+        console.log(`${C.dim}         ✓ done${C.reset}`);
+      } else if (status === 'error') {
+        const errMsg = event.error?.message || event.message || 'failed';
+        console.log(`${C.red}         ✗ ${errMsg}${C.reset}`);
       } else {
-        console.log(`${C.red}  ✗ ${status}${C.reset}`);
+        console.log(`${C.dim}         → ${status}${C.reset}`);
       }
       startSpinner('Processing');
     }
 
+    // ── Approval required ────────────────────────────────────────────────
     else if (type === 'tool.approval_required') {
       stopSpinner();
       const threadId = event.threadId || event.thread_id || 'main';
@@ -223,31 +257,47 @@ async function runTurnStream(inputItems) {
       pendingApprovals.push({ threadId, toolCalls });
     }
 
+    // ── Sandbox created ──────────────────────────────────────────────────
     else if (type === 'sandbox.created') {
       stopSpinner();
       console.log(`${C.dim}  📦 Sandbox created${C.reset}`);
       startSpinner('Thinking');
     }
 
+    // ── Thread/subagent created ──────────────────────────────────────────
     else if (type === 'thread.created') {
       stopSpinner();
-      console.log(`${C.dim}  ↳ Subagent: ${event.title || 'unnamed'}${C.reset}`);
+      console.log(`${C.dim}  ↳ Subagent: ${event.title || event.name || 'unnamed'}${C.reset}`);
       startSpinner('Thinking');
     }
 
+    // ── Turn done ────────────────────────────────────────────────────────
     else if (type === 'turn.done') {
       stopSpinner();
       const status = (event.state || {}).status || 'done';
       if (status === 'error') {
         console.log(`\n${C.red}✕ Agent error${C.reset}`);
       }
+      // Print step summary if there were tool calls
+      if (stepCounter > 0) {
+        console.log(`${C.dim}  ── ${stepCounter} tool call(s) completed ──${C.reset}`);
+      }
       break;
     }
 
+    // ── Error ────────────────────────────────────────────────────────────
     else if (type === 'error') {
       stopSpinner();
       console.error(`\n${C.red}✕ ${event.message || 'Unknown error'}${C.reset}`);
       break;
+    }
+
+    // ── Catch-all: log unknown event types so nothing is silently dropped ──
+    else if (type !== 'turn.created' && type !== 'model.message.delta.chunk') {
+      const summary = JSON.stringify(event).slice(0, 200);
+      stopSpinner();
+      console.log(`${C.dim}  [${type}] ${summary}${C.reset}`);
+      startSpinner('Processing');
     }
   }
 
@@ -273,6 +323,8 @@ async function runTurn(prompt) {
     let depth = 0;
 
     while (true) {
+      // Reset step counter for each turn
+      stepCounter = 0;
       const pendingApprovals = await runTurnStream(inputItems);
 
       if (pendingApprovals.length === 0) {
