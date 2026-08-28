@@ -1,0 +1,1 @@
+{"name": "forgeops", "version": "3.2.0", "description": "ForgeOps CLI - Terminal client for TrueForge agent", "type": "module", "scripts": {"cli": "node cli.mjs"}, "dependencies": {"@truefoundry/trueforge-sdk": "^0.1.0"}, "engines": {"node": ">=18"}}
