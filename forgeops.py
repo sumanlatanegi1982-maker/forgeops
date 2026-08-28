@@ -76,8 +76,7 @@ console = Console()
 
 DEFAULT_TRUEFORGE_URL = os.environ.get("TRUEFORGE_BASE_URL", "http://localhost:8790")
 MODEL_FQN = os.environ.get("FORGEOPS_MODEL", "sarvam-105b/sarvam-105b")
-VERSION = "3.0.0"
-CONFIG_FILE = os.path.expanduser("~/.forgeops_config.json")
+VERSION = "3.1.0"
 
 # The agent name in TrueForge — configure everything (model, connectors,
 # skills, sandbox) in the TrueForge UI. The CLI just references it by name.
@@ -102,186 +101,6 @@ C_ERROR = "#ef6b6b"
 C_APPROVAL = "#f97316"
 C_DIM = "#55555c"
 C_ACCENT = "#a3a3ff"
-
-
-# ─── Config persistence ──────────────────────────────────────────────────────
-
-def save_config(config: dict):
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-    except Exception:
-        pass
-
-def load_config() -> dict:
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-# ─── Generic Connector System ─────────────────────────────────────────────────
-
-class Connector:
-    """A generic API connector. Stores name, base URL, API key, and type.
-    Supports GitHub, GitLab, Jira, Slack, or any REST API."""
-
-    def __init__(self, name: str, base_url: str, api_key: str, conn_type: str = "github"):
-        self.name = name
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
-        self.type = conn_type
-        self.client = httpx.Client(
-            timeout=30.0,
-            headers=self._build_headers(),
-        )
-
-    def _build_headers(self) -> dict:
-        if self.type == "github":
-            return {
-                "Authorization": f"token {self.api_key}",
-                "Accept": "application/vnd.github.v3+json",
-            }
-        elif self.type == "gitlab":
-            return {
-                "PRIVATE-TOKEN": self.api_key,
-                "Accept": "application/json",
-            }
-        else:
-            return {
-                "Authorization": f"Bearer {self.api_key}",
-                "Accept": "application/json",
-            }
-
-    def test(self) -> tuple:
-        try:
-            if self.type == "github":
-                resp = self.client.get("https://api.github.com/user")
-                if resp.status_code == 200:
-                    return (True, f"GitHub connected as @{resp.json().get('login', '?')}")
-                return (False, f"GitHub auth failed (HTTP {resp.status_code})")
-            elif self.type == "gitlab":
-                resp = self.client.get(f"{self.base_url}/api/v4/user")
-                if resp.status_code == 200:
-                    return (True, f"GitLab connected as @{resp.json().get('username', '?')}")
-                return (False, f"GitLab auth failed (HTTP {resp.status_code})")
-            else:
-                resp = self.client.get(self.base_url)
-                if resp.status_code < 500:
-                    return (True, f"{self.name} reachable (HTTP {resp.status_code})")
-                return (False, f"{self.name} error (HTTP {resp.status_code})")
-        except Exception as e:
-            return (False, str(e))
-
-    def get(self, path: str) -> dict:
-        url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
-        resp = self.client.get(url)
-        try:
-            return resp.json()
-        except Exception:
-            return {"text": resp.text, "status": resp.status_code}
-
-    def post(self, path: str, body: dict) -> dict:
-        url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
-        resp = self.client.post(url, json=body)
-        try:
-            return resp.json()
-        except Exception:
-            return {"text": resp.text, "status": resp.status_code}
-
-
-# ─── GitHub Direct API ───────────────────────────────────────────────────────
-
-class GitHubAPI:
-    """Direct GitHub API access — used as fallback when TrueForge MCP isn't available."""
-
-    def __init__(self, token: str = "", repo: str = ""):
-        self.token = token
-        self.repo = repo
-        self.headers = {
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github.v3+json",
-        } if token else {}
-        self.client = httpx.Client(timeout=30.0, headers=self.headers)
-
-    def set_repo(self, repo: str):
-        self.repo = repo
-
-    def get_pr(self, pr_number: int) -> dict:
-        url = f"https://api.github.com/repos/{self.repo}/pulls/{pr_number}"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
-        return resp.json()
-
-    def get_pr_diff(self, pr_number: int) -> str:
-        url = f"https://api.github.com/repos/{self.repo}/pulls/{pr_number}"
-        resp = self.client.get(url, headers={**self.headers, "Accept": "application/vnd.github.v3.diff"})
-        if resp.status_code != 200:
-            return f"Error fetching diff: HTTP {resp.status_code}"
-        return resp.text
-
-    def get_pr_files(self, pr_number: int) -> list:
-        url = f"https://api.github.com/repos/{self.repo}/pulls/{pr_number}/files"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return []
-        return resp.json()
-
-    def get_file(self, path: str, branch: str = "main") -> str:
-        url = f"https://api.github.com/repos/{self.repo}/contents/{path}?ref={branch}"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return f"Error: HTTP {resp.status_code} - {resp.text[:200]}"
-        data = resp.json()
-        if data.get("encoding") == "base64":
-            import base64
-            return base64.b64decode(data["content"]).decode("utf-8", errors="replace")
-        return data.get("content", "")
-
-    def create_or_update_file(self, path: str, content: str, message: str, branch: str = "main") -> dict:
-        url = f"https://api.github.com/repos/{self.repo}/contents/{path}"
-        sha = None
-        check = self.client.get(f"{url}?ref={branch}")
-        if check.status_code == 200:
-            sha = check.json().get("sha")
-        import base64
-        payload = {
-            "message": message,
-            "content": base64.b64encode(content.encode()).decode(),
-            "branch": branch,
-        }
-        if sha:
-            payload["sha"] = sha
-        resp = self.client.put(url, json=payload)
-        if resp.status_code in (200, 201):
-            return {"success": True, "url": resp.json().get("content", {}).get("html_url", "")}
-        return {"error": f"HTTP {resp.status_code}: {resp.text[:300]}"}
-
-    def list_prs(self, state: str = "open") -> list:
-        url = f"https://api.github.com/repos/{self.repo}/pulls?state={state}&per_page=10"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return []
-        return resp.json()
-
-    def get_repo_info(self) -> dict:
-        url = f"https://api.github.com/repos/{self.repo}"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return {"error": f"HTTP {resp.status_code}"}
-        return resp.json()
-
-    def list_contents(self, path: str = "", branch: str = "main") -> list:
-        url = f"https://api.github.com/repos/{self.repo}/contents/{path}?ref={branch}"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return []
-        data = resp.json()
-        if isinstance(data, list):
-            return data
-        return [data]
 
 
 # ─── TrueForge API Client ────────────────────────────────────────────────────
@@ -481,16 +300,6 @@ def print_help():
     help_table.add_row("/grep <pattern> [path]", "Search for pattern in files")
     help_table.add_row("/run <cmd>", "Run a shell command")
     help_table.add_row("", "")
-    help_table.add_row("/connect", "Connect any API service (interactive wizard)")
-    help_table.add_row("/connectors", "List all connected services")
-    help_table.add_row("/disconnect <name>", "Disconnect a service")
-    help_table.add_row("/repo <owner/repo>", "Set active GitHub repo (for direct API)")
-    help_table.add_row("/prs", "List open PRs (via direct GitHub API)")
-    help_table.add_row("/pr <number>", "Fetch and review a PR")
-    help_table.add_row("/ghfile <path>", "Read a file from GitHub repo")
-    help_table.add_row("/ghwrite <path> <msg>", "Write file to GitHub (needs approval)")
-    help_table.add_row("/ghls [path]", "List GitHub repo contents")
-    help_table.add_row("", "")
     help_table.add_row("/model", "Show current model and agent")
     help_table.add_row("/status", "Show session status")
     help_table.add_row("/clear", "Clear the screen")
@@ -604,33 +413,9 @@ class ForgeOpsCLI:
         self.tf_client: Optional[TrueForgeClient] = None
         self.session_id: Optional[str] = None
         self.local_tools = LocalFileTools()
-        self.github: Optional[GitHubAPI] = None
         self.step_count = 0
         self.context_files: list = []
-
-        config = load_config()
-        self.connectors: dict = {}
-        if config.get("connectors"):
-            for cname, cdata in config["connectors"].items():
-                self.connectors[cname] = Connector(
-                    name=cname,
-                    base_url=cdata.get("base_url", ""),
-                    api_key=cdata.get("api_key", ""),
-                    conn_type=cdata.get("type", "generic"),
-                )
-        if config.get("github_token") and "github" not in self.connectors:
-            self.connectors["github"] = Connector(
-                name="github",
-                base_url="https://api.github.com",
-                api_key=config["github_token"],
-                conn_type="github",
-            )
-        if "github" in self.connectors:
-            self.github = GitHubAPI(token=self.connectors["github"].api_key, repo=config.get("github_repo", ""))
-        else:
-            self.github = None
-        if config.get("trueforge_url"):
-            self.base_url = config["trueforge_url"]
+        # The TrueForge agent has all connectors (GitHub MCP, etc) configured in the UI.
 
     def init_trueforge(self) -> bool:
         if self.local_mode:
@@ -805,10 +590,10 @@ class ForgeOpsCLI:
             return self.send_trueforge(full_prompt)
 
         if file_context:
-            console.print(f"[{C_THINK}]File context loaded. Use /connect to enable GitHub, or start TrueForge for AI analysis.[/]")
+            console.print(f"[{C_THINK}]File context loaded. Start TrueForge for AI analysis.[/]")
         else:
             console.print(f"[{C_THINK}]No AI backend connected. Here's what you can do:[/]")
-            console.print(f"  [{C_ACCENT}]/connect[/]         — Connect any API service (GitHub, GitLab, etc)")
+            console.print(f"  [{C_DIM}]Connectors are managed in TrueForge UI[/]")
             console.print(f"  [{C_ACCENT}]/file <path>[/]   — Read a local file")
             console.print(f"  [{C_ACCENT}]/ls <dir>[/]     — List directory")
             console.print(f"  [{C_ACCENT}]/tree <dir>[/]   — Show file tree")
@@ -909,285 +694,11 @@ class ForgeOpsCLI:
             )
             return True
 
-        elif command == "/connect":
-            console.print()
-            console.print(f"  [{C_ACCENT}]┌─ Connect a new service[/]")
-            console.print(f"  [{C_ACCENT}]│[/]")
-            name = Prompt.ask(f"  [{C_PROMPT}]Service name[/]", default="github", console=console)
-            console.print(f"  [{C_DIM}]Available types: github, gitlab, jira, slack, generic[/]")
-            conn_type = Prompt.ask(f"  [{C_PROMPT}]Type[/]", default="github", console=console)
-            default_url = "https://api.github.com" if conn_type == "github" else ""
-            base_url = Prompt.ask(f"  [{C_PROMPT}]Base URL[/]", default=default_url, console=console)
-            api_key = Prompt.ask(f"  [{C_PROMPT}]API Key / Token[/]", password=True, console=console)
-            console.print(f"  [{C_ACCENT}]│[/]")
-            console.print(f"  [{C_ACCENT}]└─[/]")
-            console.print()
-
-            with console.status(f"[bold cyan]Testing {name} connection...", spinner="dots"):
-                conn = Connector(name=name, base_url=base_url, api_key=api_key, conn_type=conn_type)
-                success, message = conn.test()
-
-            if success:
-                console.print(f"  [{C_DONE}]✓ {message}[/]")
-                self.connectors[name] = conn
-                config = load_config()
-                if "connectors" not in config:
-                    config["connectors"] = {}
-                config["connectors"][name] = {
-                    "base_url": base_url,
-                    "api_key": api_key,
-                    "type": conn_type,
-                }
-                save_config(config)
-                if conn_type == "github":
-                    self.github = GitHubAPI(token=api_key, repo=load_config().get("github_repo", ""))
-            else:
-                console.print(f"  [{C_ERROR}]✗ {message}[/]")
-            return True
-
-        elif command == "/connectors":
-            if not self.connectors:
-                console.print(f"  [{C_DIM}]No connectors configured. Use /connect to add one.[/]")
-            else:
-                conn_table = Table(title="Connected Services", box=box.ROUNDED, border_style=C_ACCENT)
-                conn_table.add_column("Name", style=f"bold {C_ACCENT}", width=15)
-                conn_table.add_column("Type", style=C_THINK, width=10)
-                conn_table.add_column("Base URL", style="white", width=35)
-                conn_table.add_column("Status", style=C_DONE, width=10)
-                for cname, conn in self.connectors.items():
-                    conn_table.add_row(cname, conn.type, conn.base_url, "✅")
-                console.print(conn_table)
-            return True
-
-        elif command == "/disconnect":
-            if not args:
-                console.print(f"[{C_ERROR}]Usage: /disconnect <name>[/]")
-                return True
-            if args in self.connectors:
-                del self.connectors[args]
-                config = load_config()
-                if "connectors" in config and args in config["connectors"]:
-                    del config["connectors"][args]
-                    save_config(config)
-                if args == "github":
-                    self.github = None
-                console.print(f"  [{C_DONE}]✓ Disconnected {args}[/]")
-            else:
-                console.print(f"  [{C_ERROR}]No connector named '{args}'[/]")
-            return True
-
-        elif command == "/repo":
-            if not args:
-                console.print(f"[{C_ERROR}]Usage: /repo <owner/repo>[/]")
-                return True
-            if not self.github:
-                console.print(f"[{C_ERROR}]Not connected. Run /connect first.[/]")
-                return True
-            self.github.set_repo(args)
-            save_config({**load_config(), "github_repo": args})
-            with console.status(f"[bold cyan]Checking repo {args}...", spinner="dots"):
-                info = self.github.get_repo_info()
-            if "error" in info:
-                console.print(f"  [{C_ERROR}]✗ {info['error']}[/]")
-            else:
-                console.print(f"  [{C_DONE}]✓ Repo: {info.get('full_name', args)}[/]")
-                console.print(f"  [{C_DIM}]Stars: {info.get('stargazers_count', 0)} · Forks: {info.get('forks_count', 0)} · Default branch: {info.get('default_branch', 'main')}[/]")
-            return True
-
-        elif command == "/prs":
-            if not self.github or not self.github.repo:
-                console.print(f"[{C_ERROR}]Connect first: /connect then /repo <owner/repo>[/]")
-                return True
-            with console.status("[bold cyan]Fetching PRs...", spinner="dots"):
-                prs = self.github.list_prs()
-            if not prs:
-                console.print(f"  [{C_DIM}]No open PRs found.[/]")
-                return True
-            pr_table = Table(title="Open Pull Requests", box=box.ROUNDED, border_style=C_ACCENT)
-            pr_table.add_column("#", style="bold", width=6)
-            pr_table.add_column("Title", style="white", width=40)
-            pr_table.add_column("Author", style=C_DIM, width=15)
-            pr_table.add_column("Branch", style=C_THINK, width=20)
-            for pr in prs:
-                pr_table.add_row(
-                    str(pr.get("number", "?")),
-                    pr.get("title", "?")[:40],
-                    pr.get("user", {}).get("login", "?"),
-                    pr.get("head", {}).get("ref", "?")[:20],
-                )
-            console.print(pr_table)
-            return True
-
-        elif command == "/pr":
-            if not args:
-                console.print(f"[{C_ERROR}]Usage: /pr <number>[/]")
-                return True
-            if not self.github or not self.github.repo:
-                console.print(f"[{C_ERROR}]Connect first: /connect then /repo <owner/repo>[/]")
-                return True
-            try:
-                pr_num = int(args.strip())
-            except ValueError:
-                console.print(f"[{C_ERROR}]PR number must be a number, e.g. /pr 5[/]")
-                return True
-
-            with console.status(f"[bold cyan]Fetching PR #{pr_num}...", spinner="dots"):
-                pr = self.github.get_pr(pr_num)
-                diff = self.github.get_pr_diff(pr_num)
-                files = self.github.get_pr_files(pr_num)
-
-            if "error" in pr:
-                print_error(pr["error"])
-                return True
-
-            pr_table = Table(title=f"PR #{pr_num}", box=box.ROUNDED, border_style=C_ACCENT)
-            pr_table.add_column("Field", style=f"bold {C_ACCENT}", width=15)
-            pr_table.add_column("Value", style="white", width=50)
-            pr_table.add_row("Title", pr.get("title", "?"))
-            pr_table.add_row("Author", pr.get("user", {}).get("login", "?"))
-            pr_table.add_row("State", pr.get("state", "?"))
-            pr_table.add_row("Branch", f"{pr.get('head', {}).get('ref', '?')} → {pr.get('base', {}).get('ref', '?')}")
-            pr_table.add_row("Changed files", str(len(files)))
-            pr_table.add_row("Additions", f"+{pr.get('additions', 0)}")
-            pr_table.add_row("Deletions", f"-{pr.get('deletions', 0)}")
-            console.print(pr_table)
-
-            if files:
-                file_table = Table(title="Changed Files", box=box.SIMPLE, border_style=C_DIM)
-                file_table.add_column("File", style="white", width=40)
-                file_table.add_column("Status", style=C_TOOL, width=10)
-                file_table.add_column("+/-", style=C_DIM, width=10)
-                for f in files[:15]:
-                    file_table.add_row(
-                        f.get("filename", "?")[:40],
-                        f.get("status", "?"),
-                        f"+{f.get('additions', 0)}/-{f.get('deletions', 0)}",
-                    )
-                console.print(file_table)
-
-            if diff:
-                console.print(
-                    Panel(
-                        Syntax(diff[:5000], "diff", theme="monokai", line_numbers=False) if RICH_AVAILABLE else diff[:5000],
-                        title=f"[bold {C_ACCENT}]📝 Diff (first 5000 chars)[/]",
-                        border_style=C_ACCENT,
-                        padding=(0, 1),
-                    )
-                )
-
-            if self.tf_client and self.session_id:
-                console.print(f"\n  [{C_THINK}]Sending to agent for review...[/]")
-                review_prompt = f"""Review PR #{pr_num} in repo {self.github.repo}.
-
-PR Title: {pr.get('title', '?')}
-PR Body: {pr.get('body', 'N/A')[:1000]}
-
-Changed files:
-{json.dumps([{'file': f.get('filename'), 'status': f.get('status'), 'additions': f.get('additions'), 'deletions': f.get('deletions')} for f in files], indent=2)}
-
-Diff:
-{diff[:8000]}
-
-Provide a structured code review covering:
-1. Summary of changes
-2. Potential bugs or issues
-3. Security concerns
-4. Suggestions for improvement
-"""
-                return self.send_trueforge(review_prompt)
-            else:
-                console.print(f"\n  [{C_THINK}]Raw PR data shown above. Connect TrueForge for AI-powered review.[/]")
-            return True
-
-        elif command == "/ghfile":
-            if not args:
-                console.print(f"[{C_ERROR}]Usage: /ghfile <path>[/]")
-                return True
-            if not self.github or not self.github.repo:
-                console.print(f"[{C_ERROR}]Connect first: /connect then /repo <owner/repo>[/]")
-                return True
-            with console.status(f"[bold cyan]Fetching {args}...", spinner="dots"):
-                content = self.github.get_file(args)
-            if content.startswith("Error:"):
-                print_error(content)
-                return True
-            self.context_files.append({"path": f"github:{args}", "content": content})
-            lines = content.split("\n")
-            preview = "\n".join(lines[:40])
-            if len(lines) > 40:
-                preview += f"\n... ({len(lines)} lines total)"
-            ext = args.split(".")[-1] if "." in args else "text"
-            lang_map = {"py": "python", "js": "javascript", "ts": "typescript", "md": "markdown", "json": "json", "yml": "yaml", "yaml": "yaml"}
-            syntax_lang = lang_map.get(ext, "text")
-            console.print(
-                Panel(
-                    Syntax(preview, syntax_lang, theme="monokai", line_numbers=True) if RICH_AVAILABLE else preview,
-                    title=f"[bold {C_ACCENT}]📄 GitHub: {args}[/]",
-                    border_style=C_ACCENT,
-                    padding=(0, 1),
-                )
-            )
-            console.print(f"  [{C_DIM}]File loaded into context ({len(content):,} chars)[/]")
-            return True
-
-        elif command == "/ghls":
-            path = args or ""
-            if not self.github or not self.github.repo:
-                console.print(f"[{C_ERROR}]Connect first: /connect then /repo <owner/repo>[/]")
-                return True
-            with console.status("[bold cyan]Listing repo contents...", spinner="dots"):
-                items = self.github.list_contents(path)
-            if not items:
-                console.print(f"  [{C_DIM}]No contents found at {path or '/'}[/]")
-                return True
-            tree = Tree(f"[bold {C_ACCENT}]📁 {self.github.repo}/{path}[/]")
-            for item in items:
-                icon = "📁" if item.get("type") == "dir" else "📄"
-                tree.add(f"{icon} {item.get('name', '?')}")
-            console.print(tree)
-            return True
-
-        elif command == "/ghwrite":
-            write_parts = args.split(None, 1)
-            if len(write_parts) < 2:
-                console.print(f"[{C_ERROR}]Usage: /ghwrite <path> <commit-message>[/]")
-                console.print(f"[{C_DIM}]File content must be loaded first with /file <path>[/]")
-                return True
-            if not self.github or not self.github.repo:
-                console.print(f"[{C_ERROR}]Connect first: /connect then /repo <owner/repo>[/]")
-                return True
-            filepath = write_parts[0]
-            commit_msg = write_parts[1]
-
-            if not self.context_files:
-                console.print(f"[{C_ERROR}]No file in context. Load one first: /file <local-path>[/]")
-                return True
-            file_content = self.context_files[-1]["content"]
-            self.context_files = []
-
-            print_approval("github.create_file", f"path={filepath}, repo={self.github.repo}")
-            choice = Prompt.ask(f"[{C_APPROVAL}]Write file to GitHub?[/]", choices=["y", "n"], default="n")
-            if choice != "y":
-                console.print(f"  [{C_ERROR}]Cancelled.[/]")
-                return True
-
-            with console.status(f"[bold cyan]Writing {filepath} to {self.github.repo}...", spinner="dots"):
-                result = self.github.create_or_update_file(filepath, file_content, commit_msg)
-            if result.get("success"):
-                console.print(f"  [{C_DONE}]✓ File written: {result.get('url', filepath)}[/]")
-            else:
-                print_error(result.get("error", "Unknown error"))
-            return True
-
         elif command == "/model":
             console.print(f"  [{C_ACCENT}]Model: {MODEL_FQN}[/]")
             console.print(f"  [{C_DIM}]Agent: {AGENT_NAME}[/]")
             console.print(f"  [{C_DIM}]TrueForge: {self.base_url}[/]")
-            if self.connectors:
-                for cname, conn in self.connectors.items():
-                    console.print(f"  [{C_DIM}]{cname}:[/] {conn.type} @ {conn.base_url}")
-            else:
-                console.print(f"  [{C_DIM}]No local connectors[/]")
+            console.print(f"  [{C_DIM}]Connectors are managed in TrueForge UI[/]")
             return True
 
         elif command == "/status":
@@ -1196,11 +707,7 @@ Provide a structured code review covering:
             console.print(f"  [{C_ACCENT}]Steps: {self.step_count}[/]")
             console.print(f"  [{C_ACCENT}]Mode: {self.mode}[/]")
             console.print(f"  [{C_ACCENT}]TrueForge: {'✅ Connected' if self.tf_client else '❌ Not connected'}[/]")
-            if self.connectors:
-                for cname, conn in self.connectors.items():
-                    console.print(f"  [{C_ACCENT}]{cname}:[/] {conn.type} @ {conn.base_url}")
-            else:
-                console.print(f"  [{C_ACCENT}]Connectors: ❌ None[/]")
+            console.print(f"  [{C_ACCENT}]Connectors: managed in TrueForge UI[/]")
             console.print(f"  [{C_ACCENT}]Context files: {len(self.context_files)}[/]")
             return True
 
@@ -1218,9 +725,8 @@ Provide a structured code review covering:
             return True
 
     def run_interactive(self):
-        gh_connected = len(self.connectors) > 0 if hasattr(self, "connectors") else False
         print_banner()
-        print_welcome(MODEL_FQN, self.mode, gh_connected)
+        print_welcome(MODEL_FQN, self.mode)
         console.print()
         print_step("info", f"Connected to agent: {AGENT_NAME}")
         print_step("info", "Type /help for commands, or just start typing your prompt.")
@@ -1228,12 +734,10 @@ Provide a structured code review covering:
 
         if not self.local_mode:
             if not self.init_trueforge():
-                console.print(f"[{C_THINK}]TrueForge not available. GitHub/connector commands still work.[/]")
-                console.print(f"[{C_THINK}]Use /connect to connect a service directly.[/]")
+                console.print(f"[{C_THINK}]TrueForge not available. Local file commands still work.[/]")
             else:
                 if not self.create_session():
-                    console.print(f"[{C_THINK}]Could not create session. GitHub/connector commands still work.[/]")
-                    console.print(f"[{C_THINK}]Use /connect to connect a service directly.[/]")
+                    console.print(f"[{C_THINK}]Could not create session. Local file commands still work.[/]")
 
         console.print()
         console.print(f"[{C_ACCENT}]{'─' * 60}[/]")
@@ -1267,9 +771,8 @@ Provide a structured code review covering:
                 break
 
     def run_oneshot(self, prompt: str):
-        gh_connected = len(self.connectors) > 0 if hasattr(self, "connectors") else False
         print_banner()
-        print_welcome(MODEL_FQN, self.mode, gh_connected)
+        print_welcome(MODEL_FQN, self.mode)
         console.print()
 
         if not self.local_mode:
@@ -1305,6 +808,11 @@ Examples:
 The CLI connects to your TrueForge agent 'forgeopsv1s' which has
 Sarvam 105B, GitHub MCP, sandbox, and skills configured.
 Change agent settings in the TrueForge UI — not in the CLI.
+
+Local file commands work without TrueForge:
+  /file main.py    — Read a local file
+  /ls               — List local files
+  /run pytest       — Run a command
 
 Running outside VS Code (Windows CMD):
   1. Install Python from python.org (check "Add to PATH")
