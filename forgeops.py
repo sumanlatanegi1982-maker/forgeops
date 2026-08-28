@@ -23,6 +23,7 @@ import json
 import time
 import argparse
 import subprocess
+import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -95,6 +96,59 @@ C_ERROR = "#ef6b6b"
 C_APPROVAL = "#f97316"
 C_DIM = "#55555c"
 C_ACCENT = "#a3a3ff"
+
+
+# ─── Thinking Spinner (raw ANSI, doesn't conflict with Rich) ──────────────────
+
+class ThinkingSpinner:
+    """Background thread spinner using raw ANSI codes.
+    Uses \r to overwrite the current line, so it doesn't interfere
+    with Rich's console output."""
+
+    FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    LABELS = ["Thinking", "Reasoning", "Processing", "Analyzing"]
+
+    def __init__(self):
+        self._timer = None
+        self._frame = 0
+        self._label_idx = 0
+        self._active = False
+
+    def start(self, label="Thinking"):
+        if self._active:
+            self.stop()
+        self._frame = 0
+        self._label_idx = 0
+        self._active = True
+        import sys
+        def tick():
+            if not self._active:
+                return
+            frame = self.FRAMES[self._frame % len(self.FRAMES)]
+            label = self.LABELS[self._label_idx % len(self.LABELS)]
+            # Raw ANSI: cyan spinner + dim label
+            sys.stdout.write(f"\r\033[36m{frame}\033[0m \033[2m{label}...\033[0m   ")
+            sys.stdout.flush()
+            self._frame += 1
+            # Rotate label every 15 frames (~1.2 seconds)
+            if self._frame % 15 == 0:
+                self._label_idx += 1
+            self._timer = threading.Timer(0.08, tick)
+            self._timer.daemon = True
+            self._timer.start()
+
+        tick()
+
+    def stop(self):
+        self._active = False
+        if self._timer:
+            self._timer.cancel()
+            self._timer = None
+        import sys
+        # Clear the spinner line
+        sys.stdout.write("\r" + " " * 50 + "\r")
+        sys.stdout.flush()
+
 
 # ─── TrueForge API Client ────────────────────────────────────────────────────
 
@@ -542,23 +596,19 @@ class ForgeOpsCLI:
         approval_needed = None
         full_response = ""
         has_streamed = False
-        spinner_started = False
-        live = None
+        spinner = ThinkingSpinner()
 
         try:
+            # Start spinner immediately — it shows while we wait for the first SSE event
+            spinner.start("Thinking")
+
             for event in self.tf_client.stream_turn(self.session_id, content):
                 etype = event.get("type", "")
 
-                # Start spinner before first token arrives (when we get a non-delta event)
-                if etype not in ("model.message.delta",) and not has_streamed and not spinner_started:
-                    spinner_started = True
-                    live = Live(Spinner("dots", text=Text("  Agent thinking...", style=f"{C_THINK}"), style=C_THINK), console=console, transient=True)
-                    live.start()
-
-                # Stop spinner when first text arrives or a tool call appears
-                if spinner_started and (etype == "model.message.delta" or etype == "tool.call" or etype == "tool.approval_required" or etype == "sandbox.created" or etype == "error" or etype == "turn.done"):
-                    live.stop()
-                    spinner_started = False
+                # Stop spinner when first text or tool event arrives
+                if etype in ("model.message.delta", "tool.call", "tool.approval_required",
+                             "sandbox.created", "error", "turn.done"):
+                    spinner.stop()
 
                 should_cont, approval = self.process_trueforge_event(event)
 
@@ -566,16 +616,17 @@ class ForgeOpsCLI:
                     has_streamed = True
                     full_response += event.get("content", "")
 
+                # Restart spinner while waiting for next chunk (e.g. between tool call and result)
+                if etype in ("tool.call", "tool.result", "sandbox.created", "thread.created") and not has_streamed:
+                    spinner.start("Processing")
+
                 if approval:
                     approval_needed = approval
 
                 if not should_cont:
                     break
 
-            # Make sure spinner is stopped if stream ended before any text
-            if spinner_started and live:
-                live.stop()
-                spinner_started = False
+            spinner.stop()
 
             # Handle approval
             if approval_needed:
@@ -607,13 +658,11 @@ class ForgeOpsCLI:
             return True
 
         except KeyboardInterrupt:
-            if spinner_started and live:
-                live.stop()
+            spinner.stop()
             console.print(f"\n  [{C_ERROR}]Interrupted.[/]")
             return False
         except Exception as e:
-            if spinner_started and live:
-                live.stop()
+            spinner.stop()
             print_error(str(e))
             return False
 
