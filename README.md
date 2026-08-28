@@ -1,120 +1,132 @@
 # ForgeOps CLI
 
-A beautiful terminal agent for **code review** and **incident debugging**, built for the [WeMakeDevals TrueForge Hackathon](https://www.wemakedevs.org/hackathons/trueforge).
+A clean terminal client for your **forgeopsv1s** TrueForge agent.  
+Connects directly to your saved agent — it already has your connectors (GitHub MCP, sandbox, model) configured, so no `/connect` commands or extra config needed here.
 
-ForgeOps is a Python CLI that connects to [TrueForge](https://trueforge.dev) and uses the **Sarvam 105B** model to review pull requests, debug incidents, and analyze code — all from your terminal with a rich, colorful interface.
+---
 
-## ✨ Features
+## What's fixed vs before
 
-- **Two modes**: TrueForge mode (GitHub MCP, sandbox, approvals) and Local mode (read your own files)
-- **Rich terminal UI**: Colored panels, syntax highlighting, markdown rendering
-- **Streaming responses**: See the agent's reply token-by-token as it's generated
-- **Tool call visualization**: Each tool call shows as a panel with arguments and results
-- **Approval gate**: Interactive y/n prompt before any write/destructive action
-- **Local file access**: Read files, list directories, search code, run shell commands
-- **Slash commands**: `/file`, `/ls`, `/tree`, `/grep`, `/run`, `/pr`, `/help`
 
-## 🚀 Quick Start
+| Problem                                    | Fix                                                                                                                  |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Blank/empty output after sending a message | Proper `model.message.delta` streaming — text prints token-by-token                                                  |
+| No loading indicator                       | Animated spinner (`⣾⣽⣻…`) that updates label per event type                                                          |
+| GitHub / file editing not working          | Agent already has GitHub MCP connector — the CLI just passes your message through; all tools are handled server-side |
+| Commands not running                       | No custom slash-command layer; your agent's connectors do the work                                                   |
+| Can't see connectors                       | Connectors are part of the `forgeopsv1s` agent in TrueForge UI — change them there                                   |
+| Run in CMD (not VS Code terminal)          | Works in any terminal — see below                                                                                    |
 
-### Prerequisites
 
-1. Python 3.10+
-2. TrueForge running locally (`npx @truefoundry/trueforge`) or in Codespaces
-3. Sarvam 105B model configured in TrueForge
+---
 
-### Install
+## Setup
 
-```bash
-git clone https://github.com/sumanlatanegi1982-maker/forgeops.git
-cd forgeops
-pip install -r requirements.txt
-```
-
-### Run
+### 1. Copy `.env.example` → `.env`
 
 ```bash
-# Interactive REPL (connects to TrueForge at localhost:8790)
-python forgeops.py
-
-# One-shot prompt
-python forgeops.py "Review PR #1 in sumanlatanegi1982-maker/forgeops"
-
-# Local file mode (no TrueForge needed)
-python forgeops.py --local
-
-# Include a file in context
-python forgeops.py --file src/main.py "review this code for bugs"
-
-# Custom TrueForge URL (e.g. GitHub Codespaces)
-python forgeops.py --url https://your-codespace-8790.app.github.dev
+cp .env.example .env
 ```
 
-### Environment Variables
+Edit `.env`:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TRUEFORGE_BASE_URL` | `http://localhost:8790` | TrueForge server URL |
-| `FORGEOPS_MODEL` | `sarvam-105b/sarvam-105b` | Model FQN (provider/model) |
+```env
+# Local TrueForge (VS Code / Codespace terminal)
+TRUEFORGE_BASE_URL=http://localhost:8790
 
-## 📋 Commands
+# In Codespaces, TrueForge port gets forwarded — use the forwarded URL instead:
+# TRUEFORGE_BASE_URL=https://your-codespace-name-8790.preview.app.github.dev
 
-| Command | Description |
-|---------|-------------|
-| `/help` | Show all commands |
-| `/file <path>` | Read a local file into context |
-| `/ls <dir>` | List directory contents |
-| `/tree <dir>` | Show directory tree |
-| `/grep <pattern> <path>` | Search for pattern in files |
-| `/run <cmd>` | Run a shell command |
-| `/pr <url>` | Review a GitHub PR |
-| `/model` | Show current model |
-| `/status` | Show session status |
-| `/clear` | Clear screen |
-| `/quit` | Exit |
-
-## 🏗️ Architecture
+TRUEFORGE_AGENT=forgeopsv1s
 
 ```
-forgeops.py          ← Single-file CLI (no build step, no frontend)
-├── TrueForgeClient  ← REST + SSE client (httpx, no SDK dependency)
-├── LocalFileTools   ← File system access (read, list, tree, grep, run)
-└── ForgeOpsCLI       ← Main REPL with Rich terminal UI
+
+### 2. Install dependencies
+
+```bash
+npm install
+
 ```
 
-The CLI talks to TrueForge's REST API directly:
-- `POST /api/v1/sessions` — create session with inline agent spec
-- `POST /api/v1/sessions/{id}/turns` — stream a turn via SSE
+### 3. Start TrueForge (if not already running)
 
-## 🎯 Use Cases
+In a **separate** terminal:
 
-### Code Review
-```
-forgeops> Review PR #1 in sumanlatanegi1982-maker/forgeops
-```
-The agent fetches the PR diff via GitHub MCP, analyzes the changes, and provides a structured review.
+```bash
+npx @truefoundry/trueforge
 
-### Incident Debugging
-```
-forgeops> Payment failures are spiking since the last deploy. Investigate.
-```
-The agent fetches recent commits, analyzes logs, and identifies the root cause.
-
-### Local File Analysis
-```
-forgeops> /file src/main.py
-forgeops> /file src/utils.py
-forgeops> Check these files for potential memory leaks
 ```
 
-## 🔧 Tech Stack
+This starts the server at `http://localhost:8790`.
 
-- **Python 3** — no compilation, no build step
-- **[Rich](https://rich.readthedocs.io)** — beautiful terminal formatting
-- **[httpx](https://www.python-httpx.org)** — HTTP client with SSE streaming
-- **TrueForge** — agent harness with Sarvam 105B model
-- **GitHub MCP** — pull request access
-- **Daytona** — sandbox execution
+### 4. Run the CLI
 
-## 📄 License
+```bash
+# Interactive REPL
+node cli.mjs
 
-MIT
+# One-shot (pipe-friendly)
+node cli.mjs "Review the last PR in my repo"
+
+```
+
+---
+
+## Running in Windows CMD (not VS Code terminal)
+
+1. Install Node.js 22+ from https://nodejs.org
+2. Open CMD and `cd` to this folder
+3. Run `npm install` once
+4. Run `node cli.mjs`
+
+> If TrueForge is running in a Codespace, set `TRUEFORGE_BASE_URL` to the forwarded public URL for port 8790 (visible in the Codespace ports panel).
+
+---
+
+## How it works
+
+```
+Your terminal
+     │  node cli.mjs
+     ▼
+TrueForge SDK  (@truefoundry/trueforge-sdk)
+     │  sessions.create({ agent: { name: "forgeopsv1s" } })
+     │  sessions.createTurnStream(sessionId, { input: [...] })
+     ▼
+TrueForge server  (localhost:8790)
+     │
+     ├── Model you configured in forgeopsv1s
+     ├── GitHub MCP connector you attached in forgeopsv1s
+     └── Sandbox / skills you attached in forgeopsv1s
+
+```
+
+All connectors and the model live in the **forgeopsv1s agent definition** in TrueForge — the CLI just opens a session and streams turns. To add/remove a connector, change it in the TrueForge UI (`Settings → Connectors`) and re-attach it to the agent.
+
+---
+
+## Approval prompts
+
+When the agent wants to take a write action (push to GitHub, edit a file, etc.) it will pause and ask:
+
+```
+  ⚠  Approval required
+     Function     : github_create_or_update_file
+     Arguments    : {"owner":"you","repo":"forgeops",...}
+
+  Allow this? [y/N]
+
+```
+
+Type `y` to allow, anything else to deny.
+
+---
+
+## Environment variables
+
+
+| Variable             | Default                 | Description                              |
+| -------------------- | ----------------------- | ---------------------------------------- |
+| `TRUEFORGE_BASE_URL` | `http://localhost:8790` | TrueForge server URL                     |
+| `TRUEFORGE_AGENT`    | `forgeopsv1s`           | Agent name in TrueForge                  |
+| `TRUEFORGE_TOKEN`    | *(empty)*               | OIDC token (only when login is enabled)  |
