@@ -135,8 +135,8 @@ class TrueForgeClient:
                 f"{self.base_url}/api/v1/sessions",
                 json={"agent": {"spec": AGENT_SPEC}},
             )
-            if resp.status_code != 200:
-                # Print the full error body so we can see what TrueForge is complaining about
+            # TrueForge returns 201 Created on success
+            if resp.status_code not in (200, 201):
                 console.print(f"[{C_ERROR}]Session creation failed (HTTP {resp.status_code})[/]")
                 try:
                     err_data = resp.json()
@@ -145,7 +145,9 @@ class TrueForgeClient:
                     console.print(f"[{C_ERROR}]Response body:[/] {resp.text[:1000]}")
                 return None
             data = resp.json()
-            return data.get("id")
+            # TrueForge wraps the session in {"data": {"id": "..."}}
+            session_id = data.get("id") or data.get("data", {}).get("id")
+            return session_id
         except Exception as e:
             console.print(f"[{C_ERROR}]Failed to create session:[/] {e}")
             return None
