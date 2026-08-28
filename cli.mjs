@@ -12,14 +12,14 @@
 
 import { TrueForge } from '@truefoundry/trueforge-sdk';
 import { createInterface } from 'readline';
-import { env, stdout, exit } from 'process';
+import { env, stdout, stdin, exit } from 'process';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const BASE_URL   = env.TRUEFORGE_BASE_URL || 'http://localhost:8790';
 const AGENT_NAME = env.TRUEFORGE_AGENT || 'forgeopsv1s';
 const TOKEN      = env.TRUEFORGE_TOKEN || undefined;
-const VERSION    = '3.5.0';
+const VERSION    = '3.5.1';
 
 // ─── ANSI Colors ─────────────────────────────────────────────────────────────
 
@@ -33,6 +33,7 @@ const C = {
   red:     '\x1b[31m',
   blue:    '\x1b[34m',
   white:   '\x1b[37m',
+  magenta: '\x1b[35m',
 };
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -79,9 +80,11 @@ ${C.cyan}${C.bold}  ███████╗ ██████╗ ████�
 
 let client = null;
 let sessionId = null;
-
-// Event index: maps event ID -> event data (for looking up tool call details)
 const eventIndex = new Map();
+
+// Flag: when true, the REPL 'line' handler ignores input
+// This prevents the "y" from the approval prompt being treated as a new user message
+let isApproving = false;
 
 // ─── Connect ──────────────────────────────────────────────────────────────────
 
@@ -112,9 +115,6 @@ async function connect() {
 }
 
 // ─── Look up tool call details from event index ──────────────────────────────
-// The tool.approval_required event has tool_calls: [{ id, source_event_id }]
-// We look up source_event_id in our index to find the model.message event,
-// then find the matching tool call by id to get the name + arguments.
 
 function lookupToolCall(sourceEventId, toolCallId) {
   const baseEvent = eventIndex.get(sourceEventId);
@@ -133,6 +133,8 @@ function lookupToolCall(sourceEventId, toolCallId) {
 }
 
 // ─── Approval prompt ──────────────────────────────────────────────────────────
+// Uses raw stdin data events, NOT a second readline interface.
+// This avoids the bug where the REPL's readline steals the "y" input.
 
 function askApproval(toolName, toolArgs) {
   console.log(`\n${C.yellow}${'─'.repeat(60)}${C.reset}`);
@@ -146,23 +148,30 @@ function askApproval(toolName, toolArgs) {
   console.log(`${C.yellow}${'─'.repeat(60)}${C.reset}`);
 
   return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(`${C.bold}Allow this? [${C.green}y${C.reset}${C.bold}/${C.red}N${C.reset}${C.bold}]: ${C.reset}`, (ans) => {
-      const a = ans.trim().toLowerCase();
-      rl.close();
-      if (a === 'y' || a === 'yes') {
+    isApproving = true;
+    process.stdout.write(`${C.bold}Allow this? [${C.green}y${C.reset}${C.bold}/${C.red}N${C.reset}${C.bold}]: ${C.reset}`);
+
+    const onData = (chunk) => {
+      stdin.removeListener('data', onData);
+      stdin.pause();
+      isApproving = false;
+
+      const ans = chunk.toString().trim().toLowerCase();
+      if (ans === 'y' || ans === 'yes') {
         console.log(`${C.green}✓ Approved${C.reset}`);
         resolve(true);
       } else {
         console.log(`${C.red}✕ Denied${C.reset}`);
         resolve(false);
       }
-    });
+    };
+
+    stdin.resume();
+    stdin.once('data', onData);
   });
 }
 
 // ─── Run a turn and return collected pending approvals ────────────────────────
-// Returns: array of { threadId, toolCalls } entries from tool.approval_required events
 
 async function runTurnStream(inputItems) {
   const pendingApprovals = [];
@@ -172,7 +181,6 @@ async function runTurnStream(inputItems) {
   for await (const { data: event, id: eventId } of stream.withMetadata()) {
     const type = event.type;
 
-    // Index every non-delta event (for tool call lookups later)
     if (type !== 'model.message.delta' && type !== 'model.message.delta.chunk') {
       const eid = event.id || eventId;
       if (eid) eventIndex.set(eid, event);
@@ -210,11 +218,9 @@ async function runTurnStream(inputItems) {
 
     else if (type === 'tool.approval_required') {
       stopSpinner();
-      // The event has threadId and toolCalls (array of { id, sourceEventId })
       const threadId = event.threadId || event.thread_id || 'main';
       const toolCalls = event.toolCalls || event.tool_calls || [];
       pendingApprovals.push({ threadId, toolCalls });
-      // Don't break — let the stream continue to turn.done
     }
 
     else if (type === 'sandbox.created') {
@@ -266,12 +272,11 @@ async function runTurn(prompt) {
     let inputItems = [{ type: 'user.message', content: prompt }];
     let depth = 0;
 
-    // Loop: send turn → if approvals needed → ask user → send approval turn → repeat
     while (true) {
       const pendingApprovals = await runTurnStream(inputItems);
 
       if (pendingApprovals.length === 0) {
-        break; // No approvals needed, turn is complete
+        break;
       }
 
       if (depth > 10) {
@@ -280,7 +285,6 @@ async function runTurn(prompt) {
       }
       depth++;
 
-      // Collect approval decisions for ALL pending tool calls
       const approvalInputs = [];
 
       for (const pending of pendingApprovals) {
@@ -302,7 +306,6 @@ async function runTurn(prompt) {
         }
       }
 
-      // Send all approvals as a new turn
       console.log(`\n${C.dim}Sending ${approvalInputs.length} approval(s)...${C.reset}`);
       startSpinner('Resuming agent');
       inputItems = approvalInputs;
@@ -333,14 +336,16 @@ async function main() {
   console.log(`${C.dim}Type your message and press Enter. Ctrl+C to quit.${C.reset}\n`);
 
   const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
+    input: stdin,
+    output: stdout,
     prompt: `${C.bold}${C.cyan}forgeops>${C.reset} `,
   });
 
   rl.prompt();
 
   rl.on('line', async (line) => {
+    // Ignore input while an approval prompt is active
+    if (isApproving) { return; }
     const trimmed = line.trim();
     if (!trimmed) { rl.prompt(); return; }
 
