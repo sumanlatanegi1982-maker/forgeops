@@ -21,7 +21,7 @@ const BASE_URL =
 const AGENT_NAME =
   env.TRUEFORGE_AGENT || 'forgeopsv1s';
 const TOKEN = env.TRUEFORGE_TOKEN || undefined;
-const VERSION = '3.2.0';
+const VERSION = '3.3.0';
 
 // ─── ANSI Colors ─────────────────────────────────────────────────────────────
 
@@ -36,7 +36,6 @@ const C = {
   magenta: '\x1b[35m',
   blue:    '\x1b[34m',
   white:   '\x1b[37m',
-  bgBlue:  '\x1b[44m',
 };
 
 // ─── Spinner ──────────────────────────────────────────────────────────────────
@@ -84,6 +83,10 @@ ${C.cyan}${C.bold}  ███████╗ ██████╗ ████�
 let client = null;
 let sessionId = null;
 
+// Event index: maps event ID -> event data
+// Used to look up tool call details when approval_required fires
+const eventIndex = new Map();
+
 // ─── Connect ──────────────────────────────────────────────────────────────────
 
 async function connect() {
@@ -112,17 +115,33 @@ async function connect() {
   }
 }
 
+// ─── Look up tool call details from event index ──────────────────────────────
+
+function lookupToolCall(sourceEventId) {
+  // The sourceEventId points to a model.message event that contains tool calls
+  const baseEvent = eventIndex.get(sourceEventId);
+  if (!baseEvent) return { name: 'unknown', args: {} };
+
+  // model.message events have a "toolCalls" array
+  const toolCalls = baseEvent.toolCalls || baseEvent.tool_calls || [];
+  if (toolCalls.length === 0) return { name: 'unknown', args: {} };
+
+  // Return the first tool call (simplified — works for most cases)
+  const call = toolCalls[0];
+  return {
+    name: call.name || call.function?.name || 'unknown',
+    args: call.arguments || call.function?.arguments || call.input || {},
+  };
+}
+
 // ─── Approval prompt ──────────────────────────────────────────────────────────
 
-function askApproval(toolName, toolArgs, description) {
+function askApproval(toolName, toolArgs) {
   console.log(`\n${C.yellow}${'─'.repeat(60)}${C.reset}`);
   console.log(`${C.bold}${C.yellow}⚠  Approval Required${C.reset}`);
   console.log(`${C.bold}Tool:${C.reset}       ${C.white}${toolName}${C.reset}`);
-  if (description) {
-    console.log(`${C.bold}Detail:${C.reset}     ${C.dim}${description}${C.reset}`);
-  }
-  if (toolArgs) {
-    const argsStr = typeof toolArgs === 'string' ? toolArgs : JSON.stringify(toolArgs, null, 2);
+  if (toolArgs && Object.keys(toolArgs).length > 0) {
+    const argsStr = JSON.stringify(toolArgs, null, 2);
     const truncated = argsStr.length > 300 ? argsStr.slice(0, 300) + '...' : argsStr;
     console.log(`${C.bold}Arguments:${C.reset}  ${C.dim}${truncated}${C.reset}`);
   }
@@ -166,9 +185,17 @@ async function runTurn(prompt) {
       input: [{ type: 'user.message', content: prompt }],
     });
 
-    for await (const { data: event } of stream.withMetadata()) {
+    for await (const { data: event, id: eventId } of stream.withMetadata()) {
       const type = event.type;
 
+      // Index non-delta events for later lookup (approvals need this)
+      if (type !== 'model.message.delta' && type !== 'model.message.delta.chunk') {
+        if (event.id || eventId) {
+          eventIndex.set(event.id || eventId, event);
+        }
+      }
+
+      // Model text streaming — print token by token
       if (type === 'model.message.delta') {
         if (event.threadId === 'main' || !event.threadId) {
           stopSpinner();
@@ -178,11 +205,12 @@ async function runTurn(prompt) {
         }
       }
 
+      // Tool call — show what the agent is doing
       else if (type === 'tool.call') {
         stopSpinner();
         hasOutput = true;
-        const toolName = event.toolName || 'unknown';
-        const toolArgs = event.toolArguments || {};
+        const toolName = event.toolName || event.tool_name || 'unknown';
+        const toolArgs = event.toolArguments || event.tool_arguments || {};
         console.log(`\n${C.yellow}⚙ ${C.bold}${toolName}${C.reset}`);
         const argsStr = JSON.stringify(toolArgs);
         if (argsStr !== '{}') {
@@ -191,6 +219,7 @@ async function runTurn(prompt) {
         startSpinner('Running tool');
       }
 
+      // Tool result
       else if (type === 'tool.result') {
         stopSpinner();
         const state = event.state || {};
@@ -203,33 +232,38 @@ async function runTurn(prompt) {
         startSpinner('Processing');
       }
 
+      // Approval required — look up tool name from source event, then ask user
       else if (type === 'tool.approval_required') {
         stopSpinner();
-        const toolName = event.toolName || 'unknown';
-        const toolArgs = event.toolArguments || {};
-        const description = event.description || '';
-        const approved = await askApproval(toolName, toolArgs, description);
+        const sourceEventId = event.sourceEventId || event.source_event_id;
+        const threadId = event.threadId || event.thread_id || 'main';
+        const toolInfo = lookupToolCall(sourceEventId);
+        const approved = await askApproval(toolInfo.name, toolInfo.args);
         pendingApprovals.push({
           approved,
-          sourceEventId: event.sourceEventId || event.id,
+          sourceEventId,
+          threadId,
         });
         if (approved) {
           startSpinner('Continuing');
         }
       }
 
+      // Sandbox created
       else if (type === 'sandbox.created') {
         stopSpinner();
         console.log(`${C.dim}  📦 Sandbox created${C.reset}`);
         startSpinner('Thinking');
       }
 
+      // Subagent thread
       else if (type === 'thread.created') {
         stopSpinner();
         console.log(`${C.dim}  ↳ Subagent: ${event.title || 'unnamed'}${C.reset}`);
         startSpinner('Thinking');
       }
 
+      // Turn done
       else if (type === 'turn.done') {
         stopSpinner();
         const state = event.state || {};
@@ -239,13 +273,14 @@ async function runTurn(prompt) {
           console.log(`\n${C.red}✕ Agent error${C.reset}`);
         }
 
-        // If there are pending approvals, resume with approval responses
+        // If there are pending approvals, resume with correct approval format
         if (pendingApprovals.length > 0) {
           const approvalInputs = pendingApprovals.map(a => ({
             type: 'user.tool_approval',
-            allow: a.approved,
-            ...(a.approved ? {} : { reason: 'Denied by user' }),
+            approval: a.approved,
+            threadId: a.threadId,
             sourceEventId: a.sourceEventId,
+            ...(a.approved ? {} : { reason: 'Denied by user' }),
           }));
 
           pendingApprovals = [];
@@ -255,34 +290,41 @@ async function runTurn(prompt) {
             input: approvalInputs,
           });
 
-          for await (const { data: resumeEvent } of resumeStream.withMetadata()) {
+          for await (const { data: resumeEvent, id: resumeEventId } of resumeStream.withMetadata()) {
+            if (resumeEvent.type !== 'model.message.delta') {
+              if (resumeEvent.id || resumeEventId) {
+                eventIndex.set(resumeEvent.id || resumeEventId, resumeEvent);
+              }
+            }
+
             if (resumeEvent.type === 'model.message.delta') {
               if (resumeEvent.threadId === 'main' || !resumeEvent.threadId) {
                 stopSpinner();
                 hasOutput = true;
-                const content = resumeEvent.content || '';
-                stdout.write(`${C.white}${content}${C.reset}`);
+                stdout.write(`${C.white}${resumeEvent.content || ''}${C.reset}`);
               }
             } else if (resumeEvent.type === 'tool.call') {
               stopSpinner();
-              const tn = resumeEvent.toolName || 'unknown';
+              const tn = resumeEvent.toolName || resumeEvent.tool_name || 'unknown';
               console.log(`\n${C.yellow}⚙ ${C.bold}${tn}${C.reset}`);
               startSpinner('Running tool');
             } else if (resumeEvent.type === 'tool.result') {
               stopSpinner();
               console.log(`${C.dim}  ✓ done${C.reset}`);
               startSpinner('Processing');
-            } else if (resumeEvent.type === 'turn.done') {
-              stopSpinner();
             } else if (resumeEvent.type === 'tool.approval_required') {
               stopSpinner();
-              const tn = resumeEvent.toolName || 'unknown';
-              const ta = resumeEvent.toolArguments || {};
-              const approved = await askApproval(tn, ta, '');
+              const sourceId = resumeEvent.sourceEventId || resumeEvent.source_event_id;
+              const tid = resumeEvent.threadId || resumeEvent.thread_id || 'main';
+              const toolInfo = lookupToolCall(sourceId);
+              const approved = await askApproval(toolInfo.name, toolInfo.args);
               pendingApprovals.push({
                 approved,
-                sourceEventId: resumeEvent.sourceEventId || resumeEvent.id,
+                sourceEventId: sourceId,
+                threadId: tid,
               });
+            } else if (resumeEvent.type === 'turn.done') {
+              stopSpinner();
             }
           }
 
@@ -290,9 +332,10 @@ async function runTurn(prompt) {
           if (pendingApprovals.length > 0) {
             const approvalInputs2 = pendingApprovals.map(a => ({
               type: 'user.tool_approval',
-              allow: a.approved,
-              ...(a.approved ? {} : { reason: 'Denied by user' }),
+              approval: a.approved,
+              threadId: a.threadId,
               sourceEventId: a.sourceEventId,
+              ...(a.approved ? {} : { reason: 'Denied by user' }),
             }));
             startSpinner('Processing');
             const resume2 = await client.sessions.createTurnStream(sessionId, {
@@ -313,6 +356,7 @@ async function runTurn(prompt) {
         break;
       }
 
+      // Error
       else if (type === 'error') {
         stopSpinner();
         console.error(`\n${C.red}✕ ${event.message || 'Unknown error'}${C.reset}`);
@@ -322,6 +366,9 @@ async function runTurn(prompt) {
   } catch (err) {
     stopSpinner();
     console.error(`\n${C.red}✕ ${err.message}${C.reset}`);
+    if (err.body) {
+      console.error(`${C.dim}  ${JSON.stringify(err.body).slice(0, 300)}${C.reset}`);
+    }
   }
 
   stopSpinner();
