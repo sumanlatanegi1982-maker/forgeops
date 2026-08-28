@@ -12,16 +12,14 @@
 
 import { TrueForge } from '@truefoundry/trueforge-sdk';
 import { createInterface } from 'readline';
-import { argv, env, stdout, exit } from 'process';
+import { env, stdout, exit } from 'process';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const BASE_URL =
-  env.TRUEFORGE_BASE_URL || 'http://localhost:8790';
-const AGENT_NAME =
-  env.TRUEFORGE_AGENT || 'forgeopsv1s';
-const TOKEN = env.TRUEFORGE_TOKEN || undefined;
-const VERSION = '3.4.0';
+const BASE_URL   = env.TRUEFORGE_BASE_URL || 'http://localhost:8790';
+const AGENT_NAME = env.TRUEFORGE_AGENT || 'forgeopsv1s';
+const TOKEN      = env.TRUEFORGE_TOKEN || undefined;
+const VERSION    = '3.5.0';
 
 // ─── ANSI Colors ─────────────────────────────────────────────────────────────
 
@@ -33,7 +31,6 @@ const C = {
   green:   '\x1b[32m',
   yellow:  '\x1b[33m',
   red:     '\x1b[31m',
-  magenta: '\x1b[35m',
   blue:    '\x1b[34m',
   white:   '\x1b[37m',
 };
@@ -83,8 +80,7 @@ ${C.cyan}${C.bold}  ███████╗ ██████╗ ████�
 let client = null;
 let sessionId = null;
 
-// Event index: maps event ID -> event data
-// Used to look up tool call details when approval_required fires
+// Event index: maps event ID -> event data (for looking up tool call details)
 const eventIndex = new Map();
 
 // ─── Connect ──────────────────────────────────────────────────────────────────
@@ -116,19 +112,24 @@ async function connect() {
 }
 
 // ─── Look up tool call details from event index ──────────────────────────────
+// The tool.approval_required event has tool_calls: [{ id, source_event_id }]
+// We look up source_event_id in our index to find the model.message event,
+// then find the matching tool call by id to get the name + arguments.
 
-function lookupToolCall(sourceEventId) {
+function lookupToolCall(sourceEventId, toolCallId) {
   const baseEvent = eventIndex.get(sourceEventId);
   if (!baseEvent) return { name: 'unknown', args: {} };
 
   const toolCalls = baseEvent.toolCalls || baseEvent.tool_calls || [];
-  if (toolCalls.length === 0) return { name: 'unknown', args: {} };
+  const call = toolCalls.find(tc => (tc.id || tc.toolCallId) === toolCallId) || toolCalls[0];
+  if (!call) return { name: 'unknown', args: {} };
 
-  const call = toolCalls[0];
-  return {
-    name: call.name || call.function?.name || 'unknown',
-    args: call.arguments || call.function?.arguments || call.input || {},
-  };
+  const name = call.name || call.toolInfo?.name || call.tool_info?.name || call.function?.name || 'unknown';
+  let args = call.arguments || call.function?.arguments || call.input || {};
+  if (typeof args === 'string') {
+    try { args = JSON.parse(args); } catch { /* keep as string */ }
+  }
+  return { name, args };
 }
 
 // ─── Approval prompt ──────────────────────────────────────────────────────────
@@ -160,20 +161,21 @@ function askApproval(toolName, toolArgs) {
   });
 }
 
-// ─── Consume a stream, handling approvals inline ─────────────────────────────
-// KEY FIX: When approval_required fires, we send the approval immediately
-// as a NEW turn (not after turn.done). The server keeps the session "pending"
-// until it gets the approval message.
+// ─── Run a turn and return collected pending approvals ────────────────────────
+// Returns: array of { threadId, toolCalls } entries from tool.approval_required events
 
-async function consumeStream(stream) {
+async function runTurnStream(inputItems) {
+  const pendingApprovals = [];
+
+  const stream = await client.sessions.createTurnStream(sessionId, { input: inputItems });
+
   for await (const { data: event, id: eventId } of stream.withMetadata()) {
     const type = event.type;
 
-    // Index every non-delta event for approval lookups
+    // Index every non-delta event (for tool call lookups later)
     if (type !== 'model.message.delta' && type !== 'model.message.delta.chunk') {
-      if (event.id || eventId) {
-        eventIndex.set(event.id || eventId, event);
-      }
+      const eid = event.id || eventId;
+      if (eid) eventIndex.set(eid, event);
     }
 
     if (type === 'model.message.delta') {
@@ -206,34 +208,13 @@ async function consumeStream(stream) {
       startSpinner('Processing');
     }
 
-    // ── APPROVAL: send immediately, then recurse into the resumed stream ──────
     else if (type === 'tool.approval_required') {
       stopSpinner();
-      const sourceEventId = event.sourceEventId || event.source_event_id;
-      const threadId      = event.threadId      || event.thread_id      || 'main';
-      const toolCallId    = event.toolCallId    || event.tool_call_id   || sourceEventId;
-
-      const toolInfo = lookupToolCall(sourceEventId);
-      const approved = await askApproval(toolInfo.name, toolInfo.args);
-
-      // Send the approval as a fresh turn immediately — do NOT wait for turn.done
-      const approvalPayload = {
-        type:         'user.tool_approval',
-        approval:     approved,
-        threadId,
-        toolCallId,
-        sourceEventId,
-        ...(!approved ? { reason: 'Denied by user' } : {}),
-      };
-
-      startSpinner(approved ? 'Resuming agent' : 'Sending denial');
-      const resumeStream = await client.sessions.createTurnStream(sessionId, {
-        input: [approvalPayload],
-      });
-
-      // Recurse: consume the resumed stream the same way
-      await consumeStream(resumeStream);
-      return; // the recursive call will handle turn.done
+      // The event has threadId and toolCalls (array of { id, sourceEventId })
+      const threadId = event.threadId || event.thread_id || 'main';
+      const toolCalls = event.toolCalls || event.tool_calls || [];
+      pendingApprovals.push({ threadId, toolCalls });
+      // Don't break — let the stream continue to turn.done
     }
 
     else if (type === 'sandbox.created') {
@@ -263,9 +244,11 @@ async function consumeStream(stream) {
       break;
     }
   }
+
+  return pendingApprovals;
 }
 
-// ─── Run agent turn ───────────────────────────────────────────────────────────
+// ─── Run agent turn (with approval loop) ──────────────────────────────────────
 
 async function runTurn(prompt) {
   if (!sessionId) {
@@ -280,16 +263,55 @@ async function runTurn(prompt) {
   startSpinner('Agent thinking');
 
   try {
-    const stream = await client.sessions.createTurnStream(sessionId, {
-      input: [{ type: 'user.message', content: prompt }],
-    });
+    let inputItems = [{ type: 'user.message', content: prompt }];
+    let depth = 0;
 
-    await consumeStream(stream);
+    // Loop: send turn → if approvals needed → ask user → send approval turn → repeat
+    while (true) {
+      const pendingApprovals = await runTurnStream(inputItems);
+
+      if (pendingApprovals.length === 0) {
+        break; // No approvals needed, turn is complete
+      }
+
+      if (depth > 10) {
+        console.log(`\n${C.red}✕ Too many approval rounds (10+). Stopping.${C.reset}`);
+        break;
+      }
+      depth++;
+
+      // Collect approval decisions for ALL pending tool calls
+      const approvalInputs = [];
+
+      for (const pending of pendingApprovals) {
+        for (const tc of pending.toolCalls) {
+          const toolCallId = tc.id || tc.toolCallId || tc.tool_call_id;
+          const sourceEventId = tc.sourceEventId || tc.source_event_id || tc.sourceEventId;
+
+          const toolInfo = lookupToolCall(sourceEventId, toolCallId);
+          const approved = await askApproval(toolInfo.name, toolInfo.args);
+
+          approvalInputs.push({
+            type: 'user.tool_approval',
+            threadId: pending.threadId,
+            toolCallId: toolCallId,
+            approval: approved
+              ? { status: 'allow' }
+              : { status: 'deny', reason: 'Denied by user' },
+          });
+        }
+      }
+
+      // Send all approvals as a new turn
+      console.log(`\n${C.dim}Sending ${approvalInputs.length} approval(s)...${C.reset}`);
+      startSpinner('Resuming agent');
+      inputItems = approvalInputs;
+    }
   } catch (err) {
     stopSpinner();
     console.error(`\n${C.red}✕ ${err.message}${C.reset}`);
     if (err.body) {
-      console.error(`${C.dim}  ${JSON.stringify(err.body).slice(0, 300)}${C.reset}`);
+      console.error(`${C.dim}  ${JSON.stringify(err.body).slice(0, 500)}${C.reset}`);
     }
   }
 
