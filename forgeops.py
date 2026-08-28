@@ -3,16 +3,16 @@
 ForgeOps CLI — A beautiful terminal agent for code review and incident debugging.
 Built for the WeMakeDevals TrueForge Hackathon.
 
-Works in three modes:
-  1. TrueForge mode: Uses TrueForge agent with Sarvam 105B
-  2. GitHub mode: Direct GitHub API access (read PRs, write files) — no TrueForge needed
-  3. Local mode: Reads/writes files on your computer
+Connects to your pre-configured TrueForge agent (forgeopsv1s) which has
+Sarvam 105B, GitHub MCP, sandbox, and skills already set up.
+Configure everything in the TrueForge UI — the CLI just talks to the agent.
+
+Also works in local mode (--local) for file operations without TrueForge.
 
 Usage:
   python forgeops.py                              # Interactive REPL
   python forgeops.py "review PR #1"               # One-shot prompt
   python forgeops.py --local "explain main.py"    # Local file mode
-  python forgeops.py --github TOKEN owner/repo    # GitHub mode
 
 Requirements:
   pip install rich httpx
@@ -76,8 +76,12 @@ console = Console()
 
 DEFAULT_TRUEFORGE_URL = os.environ.get("TRUEFORGE_BASE_URL", "http://localhost:8790")
 MODEL_FQN = os.environ.get("FORGEOPS_MODEL", "sarvam-105b/sarvam-105b")
-VERSION = "2.1.0"
+VERSION = "3.0.0"
 CONFIG_FILE = os.path.expanduser("~/.forgeops_config.json")
+
+# The agent name in TrueForge — configure everything (model, connectors,
+# skills, sandbox) in the TrueForge UI. The CLI just references it by name.
+AGENT_NAME = os.environ.get("FORGEOPS_AGENT_NAME", "forgeopsv1s")
 
 BANNER = r"""
  ███████╗ ██████╗ ███████╗███████╗██████╗  ██████╗██╗  ██╗███████╗██████╗
@@ -134,7 +138,6 @@ class Connector:
         )
 
     def _build_headers(self) -> dict:
-        """Build auth headers based on connector type."""
         if self.type == "github":
             return {
                 "Authorization": f"token {self.api_key}",
@@ -152,7 +155,6 @@ class Connector:
             }
 
     def test(self) -> tuple:
-        """Test the connection. Returns (success, message)."""
         try:
             if self.type == "github":
                 resp = self.client.get("https://api.github.com/user")
@@ -173,7 +175,6 @@ class Connector:
             return (False, str(e))
 
     def get(self, path: str) -> dict:
-        """GET request to base_url/path."""
         url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
         resp = self.client.get(url)
         try:
@@ -182,7 +183,6 @@ class Connector:
             return {"text": resp.text, "status": resp.status_code}
 
     def post(self, path: str, body: dict) -> dict:
-        """POST request to base_url/path."""
         url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
         resp = self.client.post(url, json=body)
         try:
@@ -194,7 +194,7 @@ class Connector:
 # ─── GitHub Direct API ───────────────────────────────────────────────────────
 
 class GitHubAPI:
-    """Direct GitHub API access — no TrueForge MCP needed."""
+    """Direct GitHub API access — used as fallback when TrueForge MCP isn't available."""
 
     def __init__(self, token: str = "", repo: str = ""):
         self.token = token
@@ -286,41 +286,19 @@ class GitHubAPI:
 
 # ─── TrueForge API Client ────────────────────────────────────────────────────
 
-AGENT_SPEC = {
-    "model": {"name": MODEL_FQN},
-    "instructions": """You are ForgeOps, a software engineering agent that does two jobs:
-
-1. Code Review: When given a pull request URL or number, fetch the PR diff and changed files via the GitHub MCP. Read the surrounding code for context. Analyze the code for bugs, security issues, and logic errors. Provide a structured review summarizing findings.
-
-2. Incident Debugging: When given an incident alert or bug report, fetch recent deploys and relevant code via the GitHub MCP. Analyze logs and test outputs. Identify the root cause. Propose a fix or rollback.
-
-Rules:
-- Show your reasoning at each step
-- If you find multiple issues, prioritise by severity
-- Keep explanations clear and actionable
-- For local file questions, the user will provide file contents in the prompt""",
-    "mcp_servers": [
-        {"name": "github", "enable_tools": ["@all"], "require_approval_for_tools": ["@write", "@destructive"]},
-    ],
-    "config": {
-        "sandbox": {"enabled": True, "file_downloads": True},
-        "iteration_limit": 50,
-    },
-}
-
-
 class TrueForgeClient:
-    """Minimal TrueForge HTTP client using REST + SSE."""
+    """TrueForge HTTP client — connects to a saved agent by name."""
 
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
         self.client = httpx.Client(timeout=httpx.Timeout(600.0, connect=10.0))
 
     def create_session(self) -> Optional[str]:
+        """Create a session referencing the saved agent by name."""
         try:
             resp = self.client.post(
                 f"{self.base_url}/api/v1/sessions",
-                json={"agent": {"spec": AGENT_SPEC}},
+                json={"agent": {"name": AGENT_NAME}},
             )
             if resp.status_code not in (200, 201):
                 console.print(f"[{C_ERROR}]Session creation failed (HTTP {resp.status_code})[/]")
@@ -506,14 +484,14 @@ def print_help():
     help_table.add_row("/connect", "Connect any API service (interactive wizard)")
     help_table.add_row("/connectors", "List all connected services")
     help_table.add_row("/disconnect <name>", "Disconnect a service")
-    help_table.add_row("/repo <owner/repo>", "Set active GitHub repo")
-    help_table.add_row("/prs", "List open PRs in the repo")
+    help_table.add_row("/repo <owner/repo>", "Set active GitHub repo (for direct API)")
+    help_table.add_row("/prs", "List open PRs (via direct GitHub API)")
     help_table.add_row("/pr <number>", "Fetch and review a PR")
     help_table.add_row("/ghfile <path>", "Read a file from GitHub repo")
     help_table.add_row("/ghwrite <path> <msg>", "Write file to GitHub (needs approval)")
     help_table.add_row("/ghls [path]", "List GitHub repo contents")
     help_table.add_row("", "")
-    help_table.add_row("/model", "Show current model")
+    help_table.add_row("/model", "Show current model and agent")
     help_table.add_row("/status", "Show session status")
     help_table.add_row("/clear", "Clear the screen")
     help_table.add_row("/quit", "Exit ForgeOps")
@@ -529,6 +507,7 @@ def print_welcome(model: str, mode: str, github_connected: bool = False):
     info.add_row("Mode", mode)
     info.add_row("Connectors", "✅ Connected" if github_connected else "❌ None (/connect)")
     if mode == "TrueForge":
+        info.add_row("Agent", AGENT_NAME)
         info.add_row("TrueForge", DEFAULT_TRUEFORGE_URL)
     console.print(Panel(info, title="[bold]Session Info[/]", border_style=C_ACCENT, padding=(1, 2)))
 
@@ -669,7 +648,7 @@ class ForgeOpsCLI:
     def create_session(self) -> bool:
         if self.local_mode:
             return True
-        console.print(f"  [{C_DIM}]Creating session...[/]", end="")
+        console.print(f"  [{C_DIM}]Creating session with agent '{AGENT_NAME}'...[/]", end="")
         self.session_id = self.tf_client.create_session()
         if self.session_id:
             console.print(f" [{C_DONE}]✓[/]")
@@ -1097,7 +1076,7 @@ class ForgeOpsCLI:
                 )
 
             if self.tf_client and self.session_id:
-                console.print(f"\n  [{C_THINK}]Sending to Sarvam for review...[/]")
+                console.print(f"\n  [{C_THINK}]Sending to agent for review...[/]")
                 review_prompt = f"""Review PR #{pr_num} in repo {self.github.repo}.
 
 PR Title: {pr.get('title', '?')}
@@ -1202,16 +1181,18 @@ Provide a structured code review covering:
 
         elif command == "/model":
             console.print(f"  [{C_ACCENT}]Model: {MODEL_FQN}[/]")
+            console.print(f"  [{C_DIM}]Agent: {AGENT_NAME}[/]")
             console.print(f"  [{C_DIM}]TrueForge: {self.base_url}[/]")
             if self.connectors:
                 for cname, conn in self.connectors.items():
                     console.print(f"  [{C_DIM}]{cname}:[/] {conn.type} @ {conn.base_url}")
             else:
-                console.print(f"  [{C_DIM}]No connectors[/]")
+                console.print(f"  [{C_DIM}]No local connectors[/]")
             return True
 
         elif command == "/status":
             console.print(f"  [{C_ACCENT}]Session: {self.session_id or 'N/A'}[/]")
+            console.print(f"  [{C_ACCENT}]Agent: {AGENT_NAME}[/]")
             console.print(f"  [{C_ACCENT}]Steps: {self.step_count}[/]")
             console.print(f"  [{C_ACCENT}]Mode: {self.mode}[/]")
             console.print(f"  [{C_ACCENT}]TrueForge: {'✅ Connected' if self.tf_client else '❌ Not connected'}[/]")
@@ -1241,6 +1222,7 @@ Provide a structured code review covering:
         print_banner()
         print_welcome(MODEL_FQN, self.mode, gh_connected)
         console.print()
+        print_step("info", f"Connected to agent: {AGENT_NAME}")
         print_step("info", "Type /help for commands, or just start typing your prompt.")
         console.print()
 
@@ -1320,16 +1302,9 @@ Examples:
   python forgeops.py "review PR #1"               # One-shot prompt
   python forgeops.py --local "explain main.py"   # Local file mode
 
-Inside the REPL:
-  /connect                                        # Connect any API service
-  /repo owner/repo                                # Set repo
-  /prs                                            # List PRs
-  /pr 5                                           # Review PR #5
-  /ghfile README.md                               # Read file from GitHub
-  /ghwrite README.md "Updated README"             # Write file to GitHub
-  /file main.py                                   # Read local file
-  /ls                                             # List local files
-  /run pytest                                     # Run a command
+The CLI connects to your TrueForge agent 'forgeopsv1s' which has
+Sarvam 105B, GitHub MCP, sandbox, and skills configured.
+Change agent settings in the TrueForge UI — not in the CLI.
 
 Running outside VS Code (Windows CMD):
   1. Install Python from python.org (check "Add to PATH")
