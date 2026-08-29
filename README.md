@@ -12,10 +12,9 @@ Built on [TrueForge](https://trueforge.dev) · Powered by Sarvam 105B · Made fo
 
 <div align="center">
 
-<!-- TODO: Replace with a real demo GIF/video -->
 **🎬 Demo Video**
 
-[![ForgeOps CLI Demo](https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg)](https://youtube.com/watch?v=VIDEO_ID_HERE)
+[![ForgeOps CLI Demo](https://img.youtube.com/vi/JEb6dS337SM/maxresdefault.jpg)](https://youtu.be/JEb6dS337SM)
 
 </div>
 
@@ -33,6 +32,7 @@ Built on [TrueForge](https://trueforge.dev) · Powered by Sarvam 105B · Made fo
 - [Project Structure](#-project-structure)
 - [Demo Tasks](#-demo-tasks)
 - [Approval Flow](#-approval-flow)
+- [Qodo PR Reviews](#-qodo-pr-reviews)
 - [Troubleshooting](#-troubleshooting)
 - [Built For](#-built-for)
 
@@ -50,6 +50,16 @@ ForgeOps is a lightweight Node.js CLI that connects to a pre-configured TrueForg
 - **Works in any terminal** — VS Code, Codespaces, Windows CMD, Linux, macOS
 - **Full visibility** — every tool call is numbered and labeled, like the TrueForge web UI's "Agent Steps" panel
 - **Human-in-the-loop** — the harness pauses before write actions; the CLI shows exactly what tool will run and asks `y/N`
+
+---
+
+<div align="center">
+
+### 📸 CLI Startup — ForgeOps Banner
+
+![ForgeOps CLI Banner](screenshots/cli-banner.jpg)
+
+</div>
 
 ---
 
@@ -114,15 +124,23 @@ To add/remove a connector, you change it in the TrueForge UI and re-attach it to
 
 ---
 
+<div align="center">
+
+### 📸 TrueForge Web UI — Agent Configuration
+
+![TrueForge Web UI](screenshots/trueforge-ui.jpg)
+
+</div>
+
+---
+
 ## ✨ Features
 
 ### Streaming Responses
 The agent's text is streamed token-by-token — you see the response appear in real time, just like the TrueForge web UI.
 
-<div align="center">
-
-<!-- TODO: Replace with screenshot of streaming output -->
-**📸 Streaming Output Screenshot**
+### Agent Steps (Like the Web UI)
+Every tool call the agent makes is displayed as a numbered step with the tool name and truncated arguments. When the result comes back, a `✓ done` or `✗ error` appears below it. At the end of the turn, a summary shows the total tool call count.
 
 ```
 ┌─ You
@@ -141,11 +159,6 @@ Now I have a clear picture of the repository. Let me conduct
 a thorough code review...
 ```
 
-</div>
-
-### Agent Steps (Like the Web UI)
-Every tool call the agent makes is displayed as a numbered step with the tool name and truncated arguments. When the result comes back, a `✓ done` or `✗ error` appears below it. At the end of the turn, a summary shows the total tool call count.
-
 ### Approval Gate
 Before any irreversible action (writing files, creating issues, pushing code), the TrueForge harness pauses the turn. The CLI shows:
 
@@ -155,30 +168,17 @@ Before any irreversible action (writing files, creating issues, pushing code), t
 
 Only after you type `y` does the agent resume and execute the tool.
 
+---
+
 <div align="center">
 
-<!-- TODO: Replace with screenshot of approval prompt -->
-**📸 Approval Gate Screenshot**
+### 📸 Approval Gate — CLI pauses before write actions
 
-```
-────────────────────────────────────────────────────────────
-⚠  Approval Required
-Tool:       create_or_update_file_contents
-Arguments:  {
-  "owner": "sumanlatanegi1982-maker",
-  "repo": "test-shop",
-  "path": "README.md",
-  "message": "docs: add README",
-  "content": "..."
-}
-────────────────────────────────────────────────────────────
-Allow this? [y/N]: y
-
-✓ Approved
-Sending 1 approval(s)...
-```
+![Approval Flow](screenshots/approval-flow.jpg)
 
 </div>
+
+---
 
 ### Multi-Turn Sessions
 The session persists context across turns. You can ask a follow-up question and the agent remembers the entire conversation — no need to resend history.
@@ -298,11 +298,15 @@ TRUEFORGE_AGENT=forgeopsv1s
 
 ```
 forgeops/
-├── cli.mjs          # The entire CLI (~400 lines, single file)
-├── package.json     # Node.js dependencies
-├── .env.example     # Environment variable template
-├── .gitignore       # Ignores node_modules, .env
-└── README.md        # This file
+├── cli.mjs              # The entire CLI (~400 lines, single file)
+├── package.json         # Node.js dependencies
+├── .env.example         # Environment variable template
+├── .gitignore           # Ignores node_modules, .env
+├── screenshots/         # Demo screenshots
+│   ├── cli-banner.jpg   # CLI startup banner
+│   ├── approval-flow.jpg # Approval gate in action
+│   └── trueforge-ui.jpg # TrueForge web UI
+└── README.md            # This file
 ```
 
 No build step. No framework. Just one file.
@@ -374,6 +378,18 @@ The approval payload follows the [TrueForge SDK specification](https://www.truef
 
 ---
 
+## 🔍 Qodo PR Reviews
+
+This project uses [Qodo](https://app.qodo.ai) for automated code review on all pull requests. Qodo was set up from day one as required by the hackathon rules.
+
+| PR | Title | Status | Qodo Review |
+|----|-------|--------|-------------|
+| [#1](https://github.com/sumanlatanegi1982-maker/forgeops/pull/1) | Initial CLI implementation | ✅ Merged | [Reviewed by Qodo](https://github.com/sumanlatanegi1982-maker/forgeops/pull/1) |
+| [#2](https://github.com/sumanlatanegi1982-maker/forgeops/pull/2) | Approval flow & streaming fixes | ✅ Merged | [Reviewed by Qodo](https://github.com/sumanlatanegi1982-maker/forgeops/pull/2) |
+| [#3](https://github.com/sumanlatanegi1982-maker/forgeops/pull/3) | Node.js CLI with TrueForge SDK | ✅ Merged | [Reviewed by Qodo](https://github.com/sumanlatanegi1982-maker/forgeops/pull/3) |
+
+---
+
 ## 🛠️ Troubleshooting
 
 ### "Could not connect to TrueForge"
@@ -416,8 +432,8 @@ Categories: **Code Review Agent** · **Approval-Gated Assistant**
 - [x] Public GitHub repo with clean code
 - [x] CLI shows agent steps (tool calls) like the web UI
 - [x] Approval gate before irreversible actions
-- [ ] Qodo PR review (mandatory — [setup guide](https://app.qodo.ai))
-- [ ] Demo video (~3 min)
+- [x] Qodo PR review (PRs #1, #2, #3)
+- [x] Demo video — [Watch on YouTube](https://youtu.be/JEb6dS337SM)
 
 ---
 
