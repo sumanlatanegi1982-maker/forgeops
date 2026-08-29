@@ -1,132 +1,428 @@
-# ForgeOps CLI
+<div align="center">
 
-A clean terminal client for your **forgeopsv1s** TrueForge agent.  
-Connects directly to your saved agent — it already has your connectors (GitHub MCP, sandbox, model) configured, so no `/connect` commands or extra config needed here.
+# ⚒️ ForgeOps
 
----
+### Terminal-native CLI agent for code review & incident debugging
 
-## What's fixed vs before
+Built on [TrueForge](https://trueforge.dev) · Powered by Sarvam 105B · Made for the WeMakeDevs Agent Harness Hackathon
 
-
-| Problem                                    | Fix                                                                                                                  |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Blank/empty output after sending a message | Proper `model.message.delta` streaming — text prints token-by-token                                                  |
-| No loading indicator                       | Animated spinner (`⣾⣽⣻…`) that updates label per event type                                                          |
-| GitHub / file editing not working          | Agent already has GitHub MCP connector — the CLI just passes your message through; all tools are handled server-side |
-| Commands not running                       | No custom slash-command layer; your agent's connectors do the work                                                   |
-| Can't see connectors                       | Connectors are part of the `forgeopsv1s` agent in TrueForge UI — change them there                                   |
-| Run in CMD (not VS Code terminal)          | Works in any terminal — see below                                                                                    |
-
+</div>
 
 ---
 
-## Setup
+<div align="center">
 
-### 1. Copy `.env.example` → `.env`
+<!-- TODO: Replace with a real demo GIF/video -->
+**🎬 Demo Video**
 
-```bash
-cp .env.example .env
+[![ForgeOps CLI Demo](https://img.youtube.com/vi/VIDEO_ID_HERE/maxresdefault.jpg)](https://youtube.com/watch?v=VIDEO_ID_HERE)
+
+</div>
+
+---
+
+## 📖 Table of Contents
+
+- [Overview](#-overview)
+- [Architecture](#-architecture)
+- [Features](#-features)
+- [How It Works](#-how-it-works)
+- [Quick Start](#-quick-start)
+- [Usage](#-usage)
+- [Environment Variables](#-environment-variables)
+- [Project Structure](#-project-structure)
+- [Demo Tasks](#-demo-tasks)
+- [Approval Flow](#-approval-flow)
+- [Troubleshooting](#-troubleshooting)
+- [Built For](#-built-for)
+
+---
+
+## 🎯 Overview
+
+ForgeOps is a lightweight Node.js CLI that connects to a pre-configured TrueForge agent (`forgeopsv1s`) from your terminal. Instead of building a web UI or managing connectors in code, ForgeOps treats the agent as a remote service — you just open a session, type a message, and watch the agent work in real time.
+
+**The agent does the heavy lifting.** It has the Sarvam 105B model, a GitHub MCP connector, a sandbox, and skills — all configured in the TrueForge UI. The CLI is just a thin client that streams responses, shows agent steps, and enforces human approval before any irreversible action.
+
+### Why a CLI?
+
+- **No setup friction** — clone, `npm install`, run
+- **Works in any terminal** — VS Code, Codespaces, Windows CMD, Linux, macOS
+- **Full visibility** — every tool call is numbered and labeled, like the TrueForge web UI's "Agent Steps" panel
+- **Human-in-the-loop** — the harness pauses before write actions; the CLI shows exactly what tool will run and asks `y/N`
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your Terminal                        │
+│                                                         │
+│   ┌─────────────────────────────────────────────────┐   │
+│   │              ForgeOps CLI (cli.mjs)              │   │
+│   │                                                 │   │
+│   │  • REPL prompt (forgeops>_)                     │   │
+│   │  • ANSI spinner + colors                         │   │
+│   │  • Streaming token display                       │   │
+│   │  • Agent step tracker (Step N: ⚙ tool_name)     │   │
+│   │  • Approval gate (y/N prompt)                    │   │
+│   └───────────────────┬─────────────────────────────┘   │
+│                       │                                 │
+│                TrueForge SDK                            │
+│          (@truefoundry/trueforge-sdk)                   │
+│                       │                                 │
+└───────────────────────┼─────────────────────────────────┘
+                        │  HTTP + SSE (Server-Sent Events)
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│                 TrueForge Server                         │
+│                 (localhost:8790)                         │
+│                                                         │
+│   ┌─────────────────────────────────────────────────┐   │
+│   │           Agent: forgeopsv1s                     │   │
+│   │                                                 │   │
+│   │  ┌───────────┐  ┌────────────┐  ┌───────────┐   │   │
+│   │  │  Model    │  │ GitHub MCP │  │  Sandbox  │   │   │
+│   │  │ Sarvam    │  │ Connector  │  │           │   │   │
+│   │  │ 105B      │  │            │  │           │   │   │
+│   │  └───────────┘  └────────────┘  └───────────┘   │   │
+│   └─────────────────────────────────────────────────┘   │
+│                                                         │
+└───────────────────────┬─────────────────────────────────┘
+                        │
+                        ▼
+              ┌──────────────────┐
+              │   GitHub API     │
+              │ (repos, issues,  │
+              │  PRs, files...)  │
+              └──────────────────┘
 ```
 
-Edit `.env`:
+### Key Design Decision: Connectors Live in the Agent, Not the CLI
+
+The CLI does **not** contain any GitHub API code, token management, or connector logic. The agent `forgeopsv1s` has everything configured in the TrueForge UI:
+
+| Component | Configured In | What It Does |
+|-----------|--------------|--------------|
+| **Model** (Sarvam 105B) | TrueForge UI → Agent Settings | The LLM that generates responses |
+| **GitHub MCP** | TrueForge UI → Settings → Connectors | Reads/writes repos, issues, PRs |
+| **Sandbox** | TrueForge UI → Agent Settings | Isolated execution environment |
+| **Skills** | TrueForge UI → Agent Settings | Specialized instruction packs |
+
+To add/remove a connector, you change it in the TrueForge UI and re-attach it to the agent. The CLI code doesn't change.
+
+---
+
+## ✨ Features
+
+### Streaming Responses
+The agent's text is streamed token-by-token — you see the response appear in real time, just like the TrueForge web UI.
+
+<div align="center">
+
+<!-- TODO: Replace with screenshot of streaming output -->
+**📸 Streaming Output Screenshot**
+
+```
+┌─ You
+│ review the code in my test-shop repo
+└─
+
+  Step 1: ⚙ get_file_contents
+         {"owner":"sumanlatanegi1982-maker","repo":"test-shop","path":""}
+         ✓ done
+  Step 2: ⚙ get_file_contents
+         {"owner":"sumanlatanegi1982-maker","repo":"test-shop","path":"test-shop.html"}
+         ✓ done
+  ── 2 tool call(s) completed ──
+
+Now I have a clear picture of the repository. Let me conduct
+a thorough code review...
+```
+
+</div>
+
+### Agent Steps (Like the Web UI)
+Every tool call the agent makes is displayed as a numbered step with the tool name and truncated arguments. When the result comes back, a `✓ done` or `✗ error` appears below it. At the end of the turn, a summary shows the total tool call count.
+
+### Approval Gate
+Before any irreversible action (writing files, creating issues, pushing code), the TrueForge harness pauses the turn. The CLI shows:
+
+- The tool name (e.g., `create_or_update_file_contents`)
+- The full arguments (truncated if very long)
+- A `y/N` prompt
+
+Only after you type `y` does the agent resume and execute the tool.
+
+<div align="center">
+
+<!-- TODO: Replace with screenshot of approval prompt -->
+**📸 Approval Gate Screenshot**
+
+```
+────────────────────────────────────────────────────────────
+⚠  Approval Required
+Tool:       create_or_update_file_contents
+Arguments:  {
+  "owner": "sumanlatanegi1982-maker",
+  "repo": "test-shop",
+  "path": "README.md",
+  "message": "docs: add README",
+  "content": "..."
+}
+────────────────────────────────────────────────────────────
+Allow this? [y/N]: y
+
+✓ Approved
+Sending 1 approval(s)...
+```
+
+</div>
+
+### Multi-Turn Sessions
+The session persists context across turns. You can ask a follow-up question and the agent remembers the entire conversation — no need to resend history.
+
+### Works Everywhere
+- VS Code terminal
+- GitHub Codespaces
+- Windows CMD (with Node.js installed)
+- Linux / macOS terminal
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) 18+ installed
+- TrueForge running locally or in a Codespace
+
+### Steps
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/sumanlatanegi1982-maker/forgeops.git
+cd forgeops
+
+# 2. Copy env file and edit
+cp .env.example .env
+# Edit .env — set TRUEFORGE_BASE_URL to your TrueForge server URL
+
+# 3. Install dependencies
+npm install
+
+# 4. Start TrueForge (in a separate terminal)
+npx @truefoundry/trueforge
+
+# 5. Run the CLI
+node cli.mjs
+```
+
+You should see:
+
+```
+  ███████╗ ██████╗ ███████╗███████╗██████╗  ██████╗██╗  ██╗███████╗██████╗
+  ██╔════╝██╔═══██╗██╔════╝██╔════╝██╔══██╗██╔════╝██║  ██║██╔════╝██╔══██╗
+  █████╗  ██║   ██║███████╗█████╗  ██████╔╝██║   ██║███████║█████╗  ██║  ██║
+  ██╔══╝  ██║   ██║╚════██║██╔══╝  ██╔══██╗██║   ██║╚════██║██╔══╝  ██║  ██║
+  ██║     ╚██████╔╝███████║███████╗██║  ██║╚██████╔╝███████║███████╗██████╔╝
+  ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝╚═════╝
+  v3.6.0 · Agent: forgeopsv1s · http://localhost:8790
+
+✓ Connected to agent forgeopsv1s (session: a1b2c3d4e5f6...)
+
+Type your message and press Enter. Ctrl+C to quit.
+
+forgeops> _
+```
+
+---
+
+## 💬 Usage
+
+### Interactive REPL
+
+```bash
+node cli.mjs
+```
+
+Then type any message at the `forgeops>` prompt:
+
+```
+forgeops> review the code in sumanlatanegi1982-maker/test-shop and tell me what bugs you find
+```
+
+### One-Shot Mode
+
+```bash
+node cli.mjs "review the last PR in my repo"
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/quit` or `/exit` | Exit the CLI |
+| `Ctrl+C` | Force quit |
+
+---
+
+## 🔧 Environment Variables
+
+Create a `.env` file (or export them in your shell):
 
 ```env
 # Local TrueForge (VS Code / Codespace terminal)
 TRUEFORGE_BASE_URL=http://localhost:8790
 
-# In Codespaces, TrueForge port gets forwarded — use the forwarded URL instead:
+# In Codespaces, TrueForge port gets forwarded — use the forwarded URL:
 # TRUEFORGE_BASE_URL=https://your-codespace-name-8790.preview.app.github.dev
 
 TRUEFORGE_AGENT=forgeopsv1s
 
+# Only needed when OIDC login is enabled in TrueForge:
+# TRUEFORGE_TOKEN=your-oidc-token
 ```
 
-### 2. Install dependencies
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRUEFORGE_BASE_URL` | `http://localhost:8790` | TrueForge server URL |
+| `TRUEFORGE_AGENT` | `forgeopsv1s` | Agent name in TrueForge |
+| `TRUEFORGE_TOKEN` | *(empty)* | OIDC token (only when login is enabled) |
 
-```bash
-npm install
+---
+
+## 📁 Project Structure
 
 ```
+forgeops/
+├── cli.mjs          # The entire CLI (~400 lines, single file)
+├── package.json     # Node.js dependencies
+├── .env.example     # Environment variable template
+├── .gitignore       # Ignores node_modules, .env
+└── README.md        # This file
+```
 
-### 3. Start TrueForge (if not already running)
+No build step. No framework. Just one file.
 
-In a **separate** terminal:
+---
 
+## 🎮 Demo Tasks
+
+Here are prompts you can try with the CLI:
+
+### 1. Code Review (Read-Only)
+```
+review the code in sumanlatanegi1982-maker/test-shop and tell me what bugs you find
+```
+Shows: streaming, agent steps, tool calls (get_file_contents), step summary.
+
+### 2. Fix & Write (Triggers Approval)
+```
+fix the bug you found and write the corrected file to the repo
+```
+Shows: approval gate, tool name + arguments, `y/N` prompt, resume after approval.
+
+### 3. Create GitHub Issue (Triggers Approval)
+```
+create a GitHub issue in sumanlatanegi1982-maker/test-shop for each bug you found
+```
+Shows: second approval gate, real GitHub issue creation via MCP.
+
+### 4. Multi-Turn Context
+```
+now summarize what you did and suggest 3 next steps for this repo
+```
+Shows: session memory — agent references previous turns without resending history.
+
+---
+
+## 🔐 Approval Flow
+
+The TrueForge harness automatically pauses before tools marked as `@write` or `@destructive`. Here's the exact flow:
+
+```
+1. User sends message
+   ↓
+2. Agent calls a write tool (e.g., create_or_update_file_contents)
+   ↓
+3. TrueForge emits tool.approval_required event
+   ↓
+4. CLI shows: ⚠ Approval Required + tool name + arguments
+   ↓
+5. User types y (allow) or N (deny)
+   ↓
+6. CLI sends approval: { approval: { status: "allow" } }
+   ↓
+7. TrueForge resumes the turn
+   ↓
+8. Agent executes the tool and continues
+```
+
+The approval payload follows the [TrueForge SDK specification](https://www.truefoundry.com/docs/agent-platform/agent-harness/sdk/runtime-api-reference#usertoolapprovalevent):
+
+```json
+{
+  "type": "user.tool_approval",
+  "threadId": "main",
+  "toolCallId": "call_xxx",
+  "approval": { "status": "allow" }
+}
+```
+
+---
+
+## 🛠️ Troubleshooting
+
+### "Could not connect to TrueForge"
+Make sure the TrueForge server is running:
 ```bash
 npx @truefoundry/trueforge
-
 ```
 
-This starts the server at `http://localhost:8790`.
+### GitHub MCP returns 403
+The GitHub token in your TrueForge connector needs `repo` scope. Go to **TrueForge UI → Settings → Connectors → GitHub MCP** and update the token.
 
-### 4. Run the CLI
+### Agent is slow to respond
+The Sarvam 105B model takes 30–60 seconds for the first token. The spinner shows the agent is working — just wait.
 
+### Approval 422 error
+Make sure you're on the latest version:
 ```bash
-# Interactive REPL
-node cli.mjs
-
-# One-shot (pipe-friendly)
-node cli.mjs "Review the last PR in my repo"
-
+git fetch origin && git reset --hard origin/main
 ```
 
 ---
 
-## Running in Windows CMD (not VS Code terminal)
+## 🏆 Built For
 
-1. Install Node.js 22+ from https://nodejs.org
-2. Open CMD and `cd` to this folder
-3. Run `npm install` once
-4. Run `node cli.mjs`
+<div align="center">
 
-> If TrueForge is running in a Codespace, set `TRUEFORGE_BASE_URL` to the forwarded public URL for port 8790 (visible in the Codespace ports panel).
+**[WeMakeDevs Agent Harness Hackathon](https://wemakedevs.org)**
 
----
+August 24–30, 2026
 
-## How it works
+Categories: **Code Review Agent** · **Approval-Gated Assistant**
 
-```
-Your terminal
-     │  node cli.mjs
-     ▼
-TrueForge SDK  (@truefoundry/trueforge-sdk)
-     │  sessions.create({ agent: { name: "forgeopsv1s" } })
-     │  sessions.createTurnStream(sessionId, { input: [...] })
-     ▼
-TrueForge server  (localhost:8790)
-     │
-     ├── Model you configured in forgeopsv1s
-     ├── GitHub MCP connector you attached in forgeopsv1s
-     └── Sandbox / skills you attached in forgeopsv1s
-
-```
-
-All connectors and the model live in the **forgeopsv1s agent definition** in TrueForge — the CLI just opens a session and streams turns. To add/remove a connector, change it in the TrueForge UI (`Settings → Connectors`) and re-attach it to the agent.
+</div>
 
 ---
 
-## Approval prompts
+## 📋 Submission Checklist
 
-When the agent wants to take a write action (push to GitHub, edit a file, etc.) it will pause and ask:
-
-```
-  ⚠  Approval required
-     Function     : github_create_or_update_file
-     Arguments    : {"owner":"you","repo":"forgeops",...}
-
-  Allow this? [y/N]
-
-```
-
-Type `y` to allow, anything else to deny.
+- [x] Agent running on TrueForge with harness doing approvals
+- [x] Public GitHub repo with clean code
+- [x] CLI shows agent steps (tool calls) like the web UI
+- [x] Approval gate before irreversible actions
+- [ ] Qodo PR review (mandatory — [setup guide](https://app.qodo.ai))
+- [ ] Demo video (~3 min)
 
 ---
 
-## Environment variables
+<div align="center">
 
+**ForgeOps** — Built by [Raghav Negi](https://github.com/sumanlatanegi1982-maker)
 
-| Variable             | Default                 | Description                              |
-| -------------------- | ----------------------- | ---------------------------------------- |
-| `TRUEFORGE_BASE_URL` | `http://localhost:8790` | TrueForge server URL                     |
-| `TRUEFORGE_AGENT`    | `forgeopsv1s`           | Agent name in TrueForge                  |
-| `TRUEFORGE_TOKEN`    | *(empty)*               | OIDC token (only when login is enabled)  |
+</div>
